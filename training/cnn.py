@@ -6,7 +6,8 @@ import torch.optim as optim
 from torchvision import datasets, models, transforms
 from torch.utils.data import DataLoader
 import helper_utils as helper_utils
-
+import os
+import shutil
 
 TRAIN_PATH = "../dataset/train"
 VAL_PATH = "../dataset/valid"
@@ -14,7 +15,7 @@ MODEL_SAVE_PATH = "../models/insulator_cnn.pth"
 BATCH_SIZE = 16
 NUM_EPOCHS = 20
 LEARNING_RATE = 0.001
-NUM_CLASSES = 2
+NUM_CLASSES = 5
 IMAGE_SIZE = 64
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -51,9 +52,36 @@ print("-" * 30)
 print("\nValidation Transformations:")
 print(val_transform_verify)
 
+# import shutil
+# import random
+
+# def create_valid_set(train_path, valid_path, classes, split_ratio=0.2):
+
+#     for cls in classes:
+#         train_cls_path = os.path.join(train_path, cls)
+#         valid_cls_path = os.path.join(valid_path, cls)
+        
+#         os.makedirs(valid_cls_path, exist_ok=True)
+        
+#         if not os.path.exists(train_cls_path):
+#             print(f"Cảnh báo: Không tìm thấy thư mục {train_cls_path}")
+#             continue
+            
+#         images = [f for f in os.listdir(train_cls_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        
+#         if len(os.listdir(valid_cls_path)) == 0 and len(images) > 0:
+#             num_valid = int(len(images) * split_ratio)
+#             valid_images = random.sample(images, num_valid)
+            
+#             print(f"Đang di chuyển {num_valid} ảnh từ {cls} sang tập Validation...")
+#             for img in valid_images:
+#                 shutil.move(os.path.join(train_cls_path, img), os.path.join(valid_cls_path, img))
+
 train_transform, val_transform = define_transformation(mean, std)
 
-all_target_classes = ['Clean-Insulator', 'Dirt-Insulator']
+all_target_classes = ['Clean-Insulator', 'Dirt-Insulator', "Broken-Disc", "Broken-Glass", "Pollution-Flashover"]
+
+# create_valid_set(TRAIN_PATH, VAL_PATH, all_target_classes)
 
 train_dataset = datasets.ImageFolder(root=TRAIN_PATH, transform=train_transform)
 val_dataset = datasets.ImageFolder(root=VAL_PATH, transform=val_transform)
@@ -232,6 +260,6 @@ trained_model = train_and_validate(
     num_epochs=5
     )
 
-# --- SAVE THE MODEL ---
+# Save model
 print(f"\n--- Saving the final model to {MODEL_SAVE_PATH} ---")
 torch.save(trained_model.state_dict(), MODEL_SAVE_PATH)

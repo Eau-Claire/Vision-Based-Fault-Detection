@@ -6,6 +6,7 @@ __pycache__/
 env/
 venv/
 ENV/
+*.log
 
 # Data & Models
 dataset/
@@ -18,6 +19,18 @@ runs/
 .vscode/
 .idea/
 
+# .NET (ASP.NET Core)
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.sln.docstates
+*.userprefs
+*.mono
+*.csproj.user
+
 # OS
 .DS_Store
 Thumbs.db
+.ipynb_checkpoints/

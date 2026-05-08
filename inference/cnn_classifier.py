@@ -6,7 +6,7 @@ from PIL import Image
 class CNNClassifier:
     def __init__(self, model_path, device='cpu'):
         self.device = torch.device(device)
-        self.class_names = ['Clean-Insulator', 'Dirt-Insulator']
+        self.class_names = ['Clean-Insulator', 'Dirt-Insulator', 'Broken-Disc', 'Broken-Glass', 'Pollution-Flashover']
         self.image_size = 224
         
         self.model = models.mobilenet_v3_small(weights=None)
