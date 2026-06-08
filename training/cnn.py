@@ -52,30 +52,7 @@ print("-" * 30)
 print("\nValidation Transformations:")
 print(val_transform_verify)
 
-# import shutil
-# import random
 
-# def create_valid_set(train_path, valid_path, classes, split_ratio=0.2):
-
-#     for cls in classes:
-#         train_cls_path = os.path.join(train_path, cls)
-#         valid_cls_path = os.path.join(valid_path, cls)
-        
-#         os.makedirs(valid_cls_path, exist_ok=True)
-        
-#         if not os.path.exists(train_cls_path):
-#             print(f"Cảnh báo: Không tìm thấy thư mục {train_cls_path}")
-#             continue
-            
-#         images = [f for f in os.listdir(train_cls_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-        
-#         if len(os.listdir(valid_cls_path)) == 0 and len(images) > 0:
-#             num_valid = int(len(images) * split_ratio)
-#             valid_images = random.sample(images, num_valid)
-            
-#             print(f"Đang di chuyển {num_valid} ảnh từ {cls} sang tập Validation...")
-#             for img in valid_images:
-#                 shutil.move(os.path.join(train_cls_path, img), os.path.join(valid_cls_path, img))
 
 train_transform, val_transform = define_transformation(mean, std)
 

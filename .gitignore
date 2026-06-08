@@ -13,6 +13,8 @@ dataset/
 runs/
 *.pth
 *.pt
+*.onnx
+*.onnx.data
 
 # Environment & IDE
 .env

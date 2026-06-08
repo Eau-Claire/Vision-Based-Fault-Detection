@@ -11,7 +11,10 @@ import os
 app = FastAPI(title="UAV Fault Detection Real-time API")
 
 IP_CAMERA_URL = os.getenv("IP_CAMERA_URL", "0")
-CNN_MODEL_PATH = "../models/insulator_cnn.pth"
+
+# Check if best_model.pth exists, otherwise fallback to legacy insulator_cnn.pth
+DEFAULT_MODEL_PATH = "../models/best_model.pth" if os.path.exists("../models/best_model.pth") else "../models/insulator_cnn.pth"
+CNN_MODEL_PATH = os.getenv("CNN_MODEL_PATH", DEFAULT_MODEL_PATH)
 
 yolo = YOLODetector('best.pt')
 cnn = None
@@ -49,7 +52,15 @@ def generate_frames():
                 refined_label, confidence = cnn.predict(item['image'])
                 display_text += f" | CNN: {refined_label} ({confidence:.1%})"
                 
-                if "Dirt" in refined_label:
+                # Check for faults in both legacy model ('Clean-Insulator' is normal, others are faults) 
+                # and new model ('normal' is normal, 'damaged', 'disconnected', 'misroute' are faults)
+                is_fault = False
+                if refined_label in ["damaged", "disconnected", "misroute"]:
+                    is_fault = True
+                elif "Clean" not in refined_label and "normal" not in refined_label.lower():
+                    is_fault = True
+                    
+                if is_fault:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
 
             cv2.putText(frame, display_text, (x1, y1 - 10), 
