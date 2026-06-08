@@ -1,0 +1,22 @@
+### Test UAV Fault Detection FastAPI Endpoints
+
+@baseUrl = http://localhost:8000
+
+### 1. Check Root Endpoint
+GET {{baseUrl}}/
+Accept: application/json
+
+###
+
+### 2. Predict Faults in an Image
+# Note: You can run this test in VS Code using the REST Client extension.
+# Replace the path in the 'src' attribute below with a valid path to an image on your system.
+POST {{baseUrl}}/predict
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="test_insulator.jpg"
+Content-Type: image/jpeg
+
+< ../dataset/train/Clean-Insulator/10KV112扬清线_16-A相绝缘子污秽_jpg.rf.NYEhNaXGHe2LdvSesS6n.jpg
+--WebAppBoundary--

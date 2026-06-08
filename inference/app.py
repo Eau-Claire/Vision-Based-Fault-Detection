@@ -1,7 +1,7 @@
 import cv2
 import torch
 import numpy as np
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, UploadFile, File
 from fastapi.responses import StreamingResponse
 import uvicorn
 from yolo_detector import YOLODetector
@@ -80,6 +80,47 @@ def index():
 def video_feed():
     return StreamingResponse(generate_frames(), 
                              media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.post("/predict")
+async def predict_image(file: UploadFile = File(...)):
+    # Read image bytes
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    if frame is None:
+        return {"error": "Could not decode uploaded image."}
+        
+    results = yolo.detect(frame)
+    crops = yolo.get_crops(frame, results)
+    
+    detections = []
+    for item in crops:
+        x1, y1, x2, y2 = item['bbox']
+        yolo_label = item['label']
+        
+        refined_label = "unknown"
+        confidence = 0.0
+        is_fault = False
+        
+        if cnn:
+            refined_label, confidence = cnn.predict(item['image'])
+            
+            # Check for faults
+            if refined_label in ["damaged", "disconnected", "misroute"]:
+                is_fault = True
+            elif "Clean" not in refined_label and "normal" not in refined_label.lower():
+                is_fault = True
+                
+        detections.append({
+            "bbox": [int(x1), int(y1), int(x2), int(y2)],
+            "yolo_label": yolo_label,
+            "refined_label": refined_label,
+            "confidence": float(confidence),
+            "is_fault": is_fault
+        })
+        
+    return {"detections": detections}
 
 if __name__ == "__main__":
     # Chạy server tại port 8000
