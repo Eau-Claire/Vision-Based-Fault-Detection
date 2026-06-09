@@ -1,11 +1,19 @@
 import os
+import sys
 import cv2
 import time
 import requests
 import json
 from PIL import Image
-from cnn_classifier import CNNClassifier
 from dotenv import load_dotenv
+
+# Add project root to path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from inference.core.cnn_classifier import CNNClassifier
 
 # Load environment variables
 load_dotenv()
@@ -15,8 +23,8 @@ load_dotenv()
 # =====================================================================
 # Gateway (Raspberry Pi 4) configurations
 IP_CAMERA_URL = os.getenv("IP_CAMERA_URL", "0")  # Camera stream source (0 = webcam)
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_ONNX_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/best_model.onnx"))
+MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
+DEFAULT_ONNX_PATH = os.path.join(MODELS_DIR, "best_model.onnx")
 ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", DEFAULT_ONNX_PATH)
 
 # Ocelot Gateway and Service configurations

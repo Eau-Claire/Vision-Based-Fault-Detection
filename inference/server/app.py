@@ -1,15 +1,22 @@
+import sys
+import os
 import cv2
-import torch
 import numpy as np
 from fastapi import FastAPI, Response, UploadFile, File
 from fastapi.responses import StreamingResponse
 import uvicorn
-from yolo_detector import YOLODetector
-from cnn_classifier import CNNClassifier
-import os
 import requests
 import json
 from collections import Counter
+
+# Add project root to path so we can import inference.core
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "../.."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from inference.core.yolo_detector import YOLODetector
+from inference.core.cnn_classifier import CNNClassifier
 
 app = FastAPI(title="UAV Fault Detection Real-time API")
 
@@ -23,13 +30,13 @@ LATITUDE = float(os.getenv("LATITUDE", "21.0285"))
 LONGITUDE = float(os.getenv("LONGITUDE", "105.8542"))
 
 # Check if best_model.pth exists, otherwise fallback to legacy insulator_cnn.pth
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_PTH_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/best_model.pth"))
-DEFAULT_LEGACY_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/insulator_cnn.pth"))
+MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
+DEFAULT_PTH_PATH = os.path.join(MODELS_DIR, "best_model.pth")
+DEFAULT_LEGACY_PATH = os.path.join(MODELS_DIR, "insulator_cnn.pth")
 DEFAULT_MODEL_PATH = DEFAULT_PTH_PATH if os.path.exists(DEFAULT_PTH_PATH) else DEFAULT_LEGACY_PATH
 CNN_MODEL_PATH = os.getenv("CNN_MODEL_PATH", DEFAULT_MODEL_PATH)
 
-DEFAULT_YOLO_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, '../models/best_detector.pt'))
+DEFAULT_YOLO_PATH = os.path.join(MODELS_DIR, "best_detector.pt")
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", DEFAULT_YOLO_PATH)
 yolo = YOLODetector(YOLO_MODEL_PATH)
 cnn = None
