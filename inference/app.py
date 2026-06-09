@@ -7,10 +7,20 @@ import uvicorn
 from yolo_detector import YOLODetector
 from cnn_classifier import CNNClassifier
 import os
+import requests
+import json
+import time
 
 app = FastAPI(title="UAV Fault Detection Real-time API")
 
 IP_CAMERA_URL = os.getenv("IP_CAMERA_URL", "0")
+
+# Ocelot Gateway and Service configurations for reporting faults
+OCELOT_GATEWAY_URL = os.getenv("OCELOT_GATEWAY_URL", "http://localhost:5000")
+JWT_TOKEN = os.getenv("JWT_TOKEN", "")
+TOWER_ID = os.getenv("TOWER_ID", "T-110KV-01")
+LATITUDE = float(os.getenv("LATITUDE", "21.0285"))
+LONGITUDE = float(os.getenv("LONGITUDE", "105.8542"))
 
 # Check if best_model.pth exists, otherwise fallback to legacy insulator_cnn.pth
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,6 +53,74 @@ def get_iou(box1, box2):
         return 0.0
     return interArea / unionArea
 
+def get_distance(box1, box2):
+    c1_x = (box1[0] + box1[2]) / 2.0
+    c1_y = (box1[1] + box1[3]) / 2.0
+    c2_x = (box2[0] + box2[2]) / 2.0
+    c2_y = (box2[1] + box2[3]) / 2.0
+    return ((c1_x - c2_x)**2 + (c1_y - c2_y)**2) ** 0.5
+
+def send_fault_to_backend(frame, label, confidence):
+    """
+    Sends detected faults to the central web server API (Ocelot Gateway -> Inspection Service).
+    First uploads the image, then registers the fault log.
+    """
+    headers = {}
+    if JWT_TOKEN:
+        headers["Authorization"] = f"Bearer {JWT_TOKEN}"
+        
+    print(f"\n⚠️  [SERVER FAULT REPORT] Type: {label} (Confidence: {confidence:.2%})")
+    
+    # 1. Encode frame to JPEG
+    ret, jpeg_buffer = cv2.imencode(".jpg", frame)
+    if not ret:
+        print("Error: Could not encode frame to JPEG for upload.")
+        return False
+        
+    # 2. Upload image
+    upload_url = f"{OCELOT_GATEWAY_URL}/api/faults/upload-image"
+    files = {"image": ("fault_capture.jpg", jpeg_buffer.tobytes(), "image/jpeg")}
+    image_path = "/uploads/mock_drone_capture.jpg"  # Default fallback path
+    
+    try:
+        print(f"Uploading fault image to {upload_url}...")
+        upload_response = requests.post(upload_url, files=files, headers=headers, timeout=5)
+        if upload_response.status_code == 200:
+            image_path = upload_response.json().get("imagePath", image_path)
+            print(f"Image uploaded successfully ✅ Path: {image_path}")
+        else:
+            print(f"Warning: Image upload failed (Code {upload_response.status_code}). Using fallback path.")
+    except Exception as e:
+        print(f"Warning: Image upload connection error: {e}. Using fallback path.")
+        
+    # 3. Post fault details
+    report_url = f"{OCELOT_GATEWAY_URL}/api/faults"
+    payload = {
+        "towerId": TOWER_ID,
+        "faultType": label,
+        "confidenceScore": confidence,
+        "imagePath": image_path,
+        "latitude": LATITUDE,
+        "longitude": LONGITUDE
+    }
+    
+    json_headers = {"Content-Type": "application/json"}
+    if JWT_TOKEN:
+        json_headers["Authorization"] = f"Bearer {JWT_TOKEN}"
+        
+    try:
+        print(f"Posting fault details to {report_url}...")
+        report_response = requests.post(report_url, data=json.dumps(payload), headers=json_headers, timeout=5)
+        if report_response.status_code in [200, 201]:
+            print(f"Fault details posted successfully ✅ Response: {report_response.text}")
+            return True
+        else:
+            print(f"Failed to post fault details: Status Code {report_response.status_code}")
+            return False
+    except Exception as e:
+        print(f"Error reporting fault details: {e}")
+        return False
+
 def generate_frames():
     cap = cv2.VideoCapture(IP_CAMERA_URL)
     
@@ -58,6 +136,12 @@ def generate_frames():
         if not success:
             break
 
+        # Get frame dimensions to make centroid distance threshold adaptive
+        h_frame, w_frame, _ = frame.shape
+        max_dim = max(h_frame, w_frame)
+        # Adaptive centroid match distance (15% of max image dimension)
+        dist_threshold = max(150.0, max_dim * 0.15)
+
         results = yolo.detect(frame)
         crops = yolo.get_crops(frame, results)
         
@@ -65,21 +149,31 @@ def generate_frames():
         matched_detections = set()
         matched_tracked = set()
         
-        # 1. Match current detections to tracked objects
+        # 1. Match current detections to tracked objects using combined Match Score
+        # Match Score combines Overlap (IoU) and Centroid proximity.
         for det_idx, item in enumerate(crops):
             bbox = item['bbox']
-            best_iou = 0.0
+            best_score = -1.0
             best_track_idx = -1
             
             for t_idx, obj in enumerate(tracked_objects):
                 if t_idx in matched_tracked:
                     continue
+                
                 iou = get_iou(bbox, obj['bbox'])
-                if iou > best_iou:
-                    best_iou = iou
+                dist = get_distance(bbox, obj['bbox'])
+                
+                # Combine IoU with distance score
+                # Normalized distance score: 1.0 at 0 dist, 0.0 at dist_threshold
+                dist_score = max(0.0, 1.0 - (dist / dist_threshold))
+                score = iou + dist_score * 0.6
+                
+                if score > best_score:
+                    best_score = score
                     best_track_idx = t_idx
             
-            if best_iou > 0.3:
+            # Match is considered valid if score is high enough (e.g. > 0.40)
+            if best_score > 0.40 and best_track_idx != -1:
                 obj = tracked_objects[best_track_idx]
                 obj['bbox'] = bbox
                 obj['missing_frames'] = 0
@@ -122,7 +216,8 @@ def generate_frames():
                     'conf_history': [confidence],
                     'missing_frames': 0,
                     'smooth_label': refined_label,
-                    'smooth_conf': confidence
+                    'smooth_conf': confidence,
+                    'reported': False
                 }
             else:
                 new_obj = {
@@ -132,7 +227,8 @@ def generate_frames():
                     'conf_history': [item['conf']],
                     'missing_frames': 0,
                     'smooth_label': item['label'],
-                    'smooth_conf': item['conf']
+                    'smooth_conf': item['conf'],
+                    'reported': False
                 }
             next_obj_id += 1
             tracked_objects.append(new_obj)
@@ -143,12 +239,12 @@ def generate_frames():
             if t_idx not in matched_tracked:
                 obj['missing_frames'] += 1
             
-            # Interpolation: keep drawing for up to 4 frames if temporarily missed
-            if obj['missing_frames'] <= 4:
+            # Interpolation hold buffer: keep drawing for up to 15 frames during camera shakes
+            if obj['missing_frames'] <= 15:
                 active_tracks.append(obj)
         tracked_objects = active_tracks
         
-        # 4. Render active tracks
+        # 4. Render active tracks and report faults
         for obj in tracked_objects:
             x1, y1, x2, y2 = obj['bbox']
             smooth_label = obj['smooth_label']
@@ -174,6 +270,13 @@ def generate_frames():
                 if is_fault:
                     # Draw thick red box for fault
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                    
+                    # REPORT TO WEB API ONLY ONCE per unique object ID (no duplicates)
+                    if not obj.get('reported', False):
+                        # Send report to backend Web API
+                        success = send_fault_to_backend(frame, smooth_label, smooth_conf)
+                        if success:
+                            obj['reported'] = True
             else:
                 display_text += f" | {smooth_label} ({smooth_conf:.1%})"
                 
