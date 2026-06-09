@@ -176,23 +176,16 @@ def generate_frames():
             track_confs_current[track_id] = avg_conf
             
             # 5. Check reporting conditions (only when actively detected):
-            # - Is a fault
+            # - Report any detected object (insulator, powerpole, faults, etc.)
             # - Has been seen for >= 10 frames (Persistence Filter)
             # - Has not been reported yet (Deduplication)
             # - Average confidence is >= 50% (Avg confidence check)
-            is_fault = False
-            if majority_label in ["damaged", "disconnected", "misroute"]:
-                is_fault = True
-            elif "Clean" not in majority_label and "normal" not in majority_label.lower():
-                is_fault = True
-                
-            if is_fault:
-                seen_frames = track_seen_frames[track_id]
-                if track_id not in reported_tracks and seen_frames >= 10:
-                    if avg_conf >= 0.50:
-                        success = send_fault_to_backend(frame, majority_label, avg_conf)
-                        if success:
-                            reported_tracks.add(track_id)
+            seen_frames = track_seen_frames[track_id]
+            if track_id not in reported_tracks and seen_frames >= 10:
+                if avg_conf >= 0.50:
+                    success = send_fault_to_backend(frame, majority_label, avg_conf)
+                    if success:
+                        reported_tracks.add(track_id)
 
         # 6. Render active and interpolated tracks
         for track_id in list(track_seen_frames.keys()):
@@ -212,7 +205,7 @@ def generate_frames():
                     is_fault = False
                     if majority_label in ["damaged", "disconnected", "misroute"]:
                         is_fault = True
-                    elif "Clean" not in majority_label and "normal" not in majority_label.lower():
+                    elif "Clean" not in majority_label and "normal" not in majority_label.lower() and majority_label.lower() != "powerpole":
                         is_fault = True
                         
                     # Choose box colors based on detection status (yellow for interpolation, green/red for active)
