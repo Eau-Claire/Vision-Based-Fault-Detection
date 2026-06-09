@@ -10,6 +10,7 @@ import os
 import requests
 import json
 import time
+from collections import Counter
 
 app = FastAPI(title="UAV Fault Detection Real-time API")
 
@@ -38,6 +39,16 @@ if os.path.exists(CNN_MODEL_PATH):
     cnn = CNNClassifier(CNN_MODEL_PATH)
 else:
     print(f"--- Cảnh báo: Không tìm thấy CNN model tại {CNN_MODEL_PATH}. Chế độ CNN Refine sẽ bị tắt. ---")
+
+# ──────────────────────────────────────────────────────────────────────
+# Tuning constants
+# ──────────────────────────────────────────────────────────────────────
+PERSIST_FRAMES = 5          # Minimum frames a track must be seen before reporting
+HOLD_FRAMES = 8             # How long to keep drawing a lost box (interpolation)
+CLEANUP_FRAMES = 20         # Remove track state after this many lost frames
+MIN_REPORT_CONF = 0.40      # Minimum average confidence to report
+HISTORY_LEN = 15            # Rolling history window length
+
 
 def send_fault_to_backend(frame, label, confidence):
     """
@@ -100,6 +111,7 @@ def send_fault_to_backend(frame, label, confidence):
         print(f"Error reporting fault details: {e}")
         return False
 
+
 def generate_frames():
     cap = cv2.VideoCapture(IP_CAMERA_URL)
     
@@ -107,141 +119,126 @@ def generate_frames():
         print(f"Lỗi: Không thể mở stream tại {IP_CAMERA_URL}")
         return
 
-    # User-requested tracking and persistence filter states
-    track_seen_frames = {}      # track_id -> count of frames seen
-    track_lost_frames = {}      # track_id -> count of consecutive frames lost
-    track_confidences = {}      # track_id -> history list of CNN classification confidences
-    track_labels = {}           # track_id -> history list of CNN predicted labels
-    track_bboxes = {}           # track_id -> last known bbox (x1, y1, x2, y2)
-    track_labels_current = {}   # track_id -> current majority label
-    track_confs_current = {}    # track_id -> current average confidence
-    reported_tracks = set()     # set of track_ids that have been reported to central server
+    # ── Per-track state ──
+    track_seen = {}             # track_id -> total frames seen
+    track_lost = {}             # track_id -> consecutive frames lost
+    track_bbox = {}             # track_id -> last known (x1, y1, x2, y2)
+    track_conf_hist = {}        # track_id -> list of recent confidences
+    track_label_hist = {}       # track_id -> list of recent labels
+    track_display_label = {}    # track_id -> smoothed majority label
+    track_display_conf = {}     # track_id -> smoothed average confidence
+    reported_tracks = set()     # track_ids already reported to backend
 
     while True:
-        success, frame = cap.read()
-        if not success:
+        ok, frame = cap.read()
+        if not ok:
             break
 
-        # Run YOLOv8 detection & tracking with ByteTrack (persist=True)
+        # ── YOLO detection + ByteTrack ──
         results = yolo.detect(frame, persist=True)
         crops = yolo.get_crops(frame, results)
-        
-        # Track IDs seen in the current frame
-        current_frame_track_ids = set()
-        
+
+        # Collect track IDs seen this frame
+        seen_this_frame = set()
+
         for item in crops:
+            tid = item['track_id']
+            if tid is None:
+                continue
+
             x1, y1, x2, y2 = item['bbox']
             yolo_label = item['label']
             yolo_conf = item['conf']
-            track_id = item['track_id']
-            
-            # If track_id is None, it means the tracker is initializing or not assigned yet
-            if track_id is None:
-                continue
-                
-            current_frame_track_ids.add(track_id)
-            
-            # 1. Update seen frame count, reset lost counter, and update bbox
-            track_seen_frames[track_id] = track_seen_frames.get(track_id, 0) + 1
-            track_lost_frames[track_id] = 0
-            track_bboxes[track_id] = (x1, y1, x2, y2)
-            
-            # 2. Run CNN classification (only for insulator crops)
-            refined_label = yolo_label
-            confidence = yolo_conf
+
+            seen_this_frame.add(tid)
+
+            # Update counters
+            track_seen[tid] = track_seen.get(tid, 0) + 1
+            track_lost[tid] = 0
+            track_bbox[tid] = (x1, y1, x2, y2)
+
+            # CNN refinement (only for insulator crops)
+            label = yolo_label
+            conf = yolo_conf
             if cnn and yolo_label.lower() == "insulator":
-                refined_label, confidence = cnn.predict(item['image'])
-                
-            # 3. Store confidence and label history
-            if track_id not in track_confidences:
-                track_confidences[track_id] = []
-                track_labels[track_id] = []
-            track_confidences[track_id].append(confidence)
-            track_labels[track_id].append(refined_label)
-            
-            # Keep history short (last 30 frames) to limit memory growth
-            if len(track_confidences[track_id]) > 30:
-                track_confidences[track_id].pop(0)
-                track_labels[track_id].pop(0)
-                
-            # 4. Calculate average confidence and majority label (temporal smoothing)
-            avg_conf = sum(track_confidences[track_id]) / len(track_confidences[track_id])
-            
-            from collections import Counter
-            votes = Counter(track_labels[track_id])
-            majority_label = votes.most_common(1)[0][0]
-            
-            # Cache the smoothed results for drawing
-            track_labels_current[track_id] = majority_label
-            track_confs_current[track_id] = avg_conf
-            
-            # 5. Check reporting conditions (only when actively detected):
-            # - Report any detected object (insulator, powerpole, faults, etc.)
-            # - Has been seen for >= 10 frames (Persistence Filter)
-            # - Has not been reported yet (Deduplication)
-            # - Average confidence is >= 50% (Avg confidence check)
-            seen_frames = track_seen_frames[track_id]
-            if track_id not in reported_tracks and seen_frames >= 10:
-                if avg_conf >= 0.50:
-                    success = send_fault_to_backend(frame, majority_label, avg_conf)
-                    if success:
-                        reported_tracks.add(track_id)
+                label, conf = cnn.predict(item['image'])
 
-        # 6. Render active and interpolated tracks
-        for track_id in list(track_seen_frames.keys()):
-            # If not seen in current frame, increment lost frames counter
-            if track_id not in current_frame_track_ids:
-                track_lost_frames[track_id] = track_lost_frames.get(track_id, 0) + 1
-                
-            # Interpolation: Keep drawing box if lost for <= 15 frames
-            if track_id in current_frame_track_ids or track_lost_frames.get(track_id, 0) <= 15:
-                # Retrieve cached drawing parameters
-                if track_id in track_bboxes and track_id in track_labels_current:
-                    x1, y1, x2, y2 = track_bboxes[track_id]
-                    majority_label = track_labels_current[track_id]
-                    avg_conf = track_confs_current[track_id]
-                    seen_frames = track_seen_frames[track_id]
-                    
-                    is_fault = False
-                    if majority_label in ["damaged", "disconnected", "misroute"]:
-                        is_fault = True
-                    elif "Clean" not in majority_label and "normal" not in majority_label.lower() and majority_label.lower() != "powerpole":
-                        is_fault = True
-                        
-                    # Choose box colors based on detection status (yellow for interpolation, green/red for active)
-                    if track_id not in current_frame_track_ids:
-                        box_color = (0, 165, 255)  # Orange/Yellow for interpolation
-                        thickness = 2
-                        status_tag = f" [LOST - HOLD {track_lost_frames[track_id]}/15]"
-                    else:
-                        box_color = (0, 0, 255) if is_fault else (0, 255, 0)
-                        thickness = 3 if is_fault else 2
-                        status_tag = " [REPORTED]" if track_id in reported_tracks else f" [{seen_frames}/10]"
-                    
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, thickness)
-                    
-                    display_text = f"Track #{track_id} | {majority_label} ({avg_conf:.1%}){status_tag}"
-                    cv2.putText(frame, display_text, (x1, y1 - 10), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+            # Append to rolling history
+            track_conf_hist.setdefault(tid, []).append(conf)
+            track_label_hist.setdefault(tid, []).append(label)
 
-        # 7. Cleanup old tracks (lost > 30 frames) to free memory
-        for track_id in list(track_seen_frames.keys()):
-            if track_lost_frames.get(track_id, 0) > 30:
-                track_seen_frames.pop(track_id, None)
-                track_lost_frames.pop(track_id, None)
-                track_confidences.pop(track_id, None)
-                track_labels.pop(track_id, None)
-                track_bboxes.pop(track_id, None)
-                track_labels_current.pop(track_id, None)
-                track_confs_current.pop(track_id, None)
-                reported_tracks.discard(track_id)
+            # Trim history
+            if len(track_conf_hist[tid]) > HISTORY_LEN:
+                track_conf_hist[tid] = track_conf_hist[tid][-HISTORY_LEN:]
+                track_label_hist[tid] = track_label_hist[tid][-HISTORY_LEN:]
 
+            # Temporal smoothing
+            avg_conf = sum(track_conf_hist[tid]) / len(track_conf_hist[tid])
+            majority_label = Counter(track_label_hist[tid]).most_common(1)[0][0]
+
+            track_display_label[tid] = majority_label
+            track_display_conf[tid] = avg_conf
+
+            # ── Report to backend (once per track) ──
+            if tid not in reported_tracks and track_seen[tid] >= PERSIST_FRAMES:
+                if avg_conf >= MIN_REPORT_CONF:
+                    report_ok = send_fault_to_backend(frame, majority_label, avg_conf)
+                    if report_ok:
+                        reported_tracks.add(tid)
+
+        # ── Draw boxes ──
+        for tid in list(track_seen.keys()):
+            # Increment lost counter for tracks not seen this frame
+            if tid not in seen_this_frame:
+                track_lost[tid] = track_lost.get(tid, 0) + 1
+
+            # Skip drawing if lost too long
+            lost_count = track_lost.get(tid, 0)
+            if lost_count > HOLD_FRAMES:
+                continue
+
+            # Need cached info to draw
+            if tid not in track_bbox or tid not in track_display_label:
+                continue
+
+            bx1, by1, bx2, by2 = track_bbox[tid]
+            lbl = track_display_label[tid]
+            cnf = track_display_conf[tid]
+
+            # Color logic
+            if tid not in seen_this_frame:
+                # Interpolated (lost but within hold window)
+                color = (0, 165, 255)   # Orange
+                thick = 1
+                tag = f" [HOLD {lost_count}/{HOLD_FRAMES}]"
+            elif tid in reported_tracks:
+                color = (0, 255, 0)     # Green – already reported
+                thick = 2
+                tag = " [SENT]"
+            else:
+                color = (255, 200, 0)   # Cyan – tracking, not yet reported
+                thick = 2
+                tag = f" [{track_seen[tid]}/{PERSIST_FRAMES}]"
+
+            cv2.rectangle(frame, (bx1, by1), (bx2, by2), color, thick)
+            text = f"#{tid} {lbl} ({cnf:.0%}){tag}"
+            cv2.putText(frame, text, (bx1, by1 - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+
+        # ── Cleanup stale tracks ──
+        for tid in list(track_seen.keys()):
+            if track_lost.get(tid, 0) > CLEANUP_FRAMES:
+                for d in (track_seen, track_lost, track_bbox,
+                          track_conf_hist, track_label_hist,
+                          track_display_label, track_display_conf):
+                    d.pop(tid, None)
+                reported_tracks.discard(tid)
+
+        # ── Encode and yield MJPEG frame ──
         ret, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()
-        
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
 
 
 @app.get("/")
@@ -273,23 +270,15 @@ async def predict_image(file: UploadFile = File(...)):
         
         refined_label = yolo_label
         confidence = float(item['conf'])
-        is_fault = False
         
         if cnn and yolo_label.lower() == "insulator":
             refined_label, confidence = cnn.predict(item['image'])
-            
-            # Check for faults
-            if refined_label in ["damaged", "disconnected", "misroute"]:
-                is_fault = True
-            elif "Clean" not in refined_label and "normal" not in refined_label.lower():
-                is_fault = True
                 
         detections.append({
             "bbox": [int(x1), int(y1), int(x2), int(y2)],
             "yolo_label": yolo_label,
             "refined_label": refined_label,
             "confidence": float(confidence),
-            "is_fault": is_fault
         })
         
     return {"detections": detections}
