@@ -146,10 +146,10 @@ def generate_frames():
             track_lost_frames[track_id] = 0
             track_bboxes[track_id] = (x1, y1, x2, y2)
             
-            # 2. Run CNN classification
+            # 2. Run CNN classification (only for insulator crops)
             refined_label = yolo_label
             confidence = yolo_conf
-            if cnn:
+            if cnn and yolo_label.lower() == "insulator":
                 refined_label, confidence = cnn.predict(item['image'])
                 
             # 3. Store confidence and label history
@@ -278,11 +278,11 @@ async def predict_image(file: UploadFile = File(...)):
         x1, y1, x2, y2 = item['bbox']
         yolo_label = item['label']
         
-        refined_label = "unknown"
-        confidence = 0.0
+        refined_label = yolo_label
+        confidence = float(item['conf'])
         is_fault = False
         
-        if cnn:
+        if cnn and yolo_label.lower() == "insulator":
             refined_label, confidence = cnn.predict(item['image'])
             
             # Check for faults
