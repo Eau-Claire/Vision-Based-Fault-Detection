@@ -38,28 +38,6 @@ if os.path.exists(CNN_MODEL_PATH):
 else:
     print(f"--- Cảnh báo: Không tìm thấy CNN model tại {CNN_MODEL_PATH}. Chế độ CNN Refine sẽ bị tắt. ---")
 
-def get_iou(box1, box2):
-    xA = max(box1[0], box2[0])
-    yA = max(box1[1], box2[1])
-    xB = min(box1[2], box2[2])
-    yB = min(box1[3], box2[3])
-    
-    interArea = max(0, xB - xA) * max(0, yB - yA)
-    box1Area = (box1[2] - box1[0]) * (box1[3] - box1[1])
-    box2Area = (box2[2] - box2[0]) * (box2[3] - box2[1])
-    
-    unionArea = box1Area + box2Area - interArea
-    if unionArea == 0:
-        return 0.0
-    return interArea / unionArea
-
-def get_distance(box1, box2):
-    c1_x = (box1[0] + box1[2]) / 2.0
-    c1_y = (box1[1] + box1[3]) / 2.0
-    c2_x = (box2[0] + box2[2]) / 2.0
-    c2_y = (box2[1] + box2[3]) / 2.0
-    return ((c1_x - c2_x)**2 + (c1_y - c2_y)**2) ** 0.5
-
 def send_fault_to_backend(frame, label, confidence):
     """
     Sends detected faults to the central web server API (Ocelot Gateway -> Inspection Service).
@@ -128,167 +106,121 @@ def generate_frames():
         print(f"Lỗi: Không thể mở stream tại {IP_CAMERA_URL}")
         return
 
-    tracked_objects = []
-    next_obj_id = 0
+    # User-requested tracking and persistence filter states
+    track_seen_frames = {}    # track_id -> count of frames seen
+    track_lost_frames = {}    # track_id -> count of consecutive frames lost
+    track_confidences = {}    # track_id -> history list of CNN classification confidences
+    track_labels = {}         # track_id -> history list of CNN predicted labels
+    reported_tracks = set()   # set of track_ids that have been reported to central server
 
     while True:
         success, frame = cap.read()
         if not success:
             break
 
-        # Get frame dimensions to make centroid distance threshold adaptive
-        h_frame, w_frame, _ = frame.shape
-        max_dim = max(h_frame, w_frame)
-        # Adaptive centroid match distance (15% of max image dimension)
-        dist_threshold = max(150.0, max_dim * 0.15)
-
-        results = yolo.detect(frame)
+        # Run YOLOv8 detection & tracking with ByteTrack (persist=True)
+        results = yolo.detect(frame, persist=True)
         crops = yolo.get_crops(frame, results)
         
-        # Keep track of matched detections and matched tracked objects
-        matched_detections = set()
-        matched_tracked = set()
+        # Track IDs seen in the current frame
+        current_frame_track_ids = set()
         
-        # 1. Match current detections to tracked objects using combined Match Score
-        # Match Score combines Overlap (IoU) and Centroid proximity.
-        for det_idx, item in enumerate(crops):
-            bbox = item['bbox']
-            best_score = -1.0
-            best_track_idx = -1
+        for item in crops:
+            x1, y1, x2, y2 = item['bbox']
+            yolo_label = item['label']
+            yolo_conf = item['conf']
+            track_id = item['track_id']
             
-            for t_idx, obj in enumerate(tracked_objects):
-                if t_idx in matched_tracked:
-                    continue
-                
-                iou = get_iou(bbox, obj['bbox'])
-                dist = get_distance(bbox, obj['bbox'])
-                
-                # Combine IoU with distance score
-                # Normalized distance score: 1.0 at 0 dist, 0.0 at dist_threshold
-                dist_score = max(0.0, 1.0 - (dist / dist_threshold))
-                score = iou + dist_score * 0.6
-                
-                if score > best_score:
-                    best_score = score
-                    best_track_idx = t_idx
-            
-            # Match is considered valid if score is high enough (e.g. > 0.40)
-            if best_score > 0.40 and best_track_idx != -1:
-                obj = tracked_objects[best_track_idx]
-                obj['bbox'] = bbox
-                obj['missing_frames'] = 0
-                
-                if cnn:
-                    refined_label, confidence = cnn.predict(item['image'])
-                    obj['label_history'].append(refined_label)
-                    obj['conf_history'].append(confidence)
-                    if len(obj['label_history']) > 5:
-                        obj['label_history'].pop(0)
-                        obj['conf_history'].pop(0)
-                        
-                    from collections import Counter
-                    votes = Counter(obj['label_history'])
-                    smooth_label = votes.most_common(1)[0][0]
-                    winning_confs = [c for l, c in zip(obj['label_history'], obj['conf_history']) if l == smooth_label]
-                    smooth_conf = sum(winning_confs) / len(winning_confs) if winning_confs else 0.0
-                    
-                    obj['smooth_label'] = smooth_label
-                    obj['smooth_conf'] = smooth_conf
-                else:
-                    obj['smooth_label'] = item['label']
-                    obj['smooth_conf'] = item['conf']
-                    
-                matched_tracked.add(best_track_idx)
-                matched_detections.add(det_idx)
-        
-        # 2. For unmatched detections, create new tracks
-        for det_idx, item in enumerate(crops):
-            if det_idx in matched_detections:
+            # If track_id is None, it means the tracker is initializing or not assigned yet
+            if track_id is None:
                 continue
-            bbox = item['bbox']
+                
+            current_frame_track_ids.add(track_id)
             
+            # 1. Update seen frame count & reset lost counter
+            track_seen_frames[track_id] = track_seen_frames.get(track_id, 0) + 1
+            track_lost_frames[track_id] = 0
+            
+            # 2. Run CNN classification
+            refined_label = yolo_label
+            confidence = yolo_conf
             if cnn:
                 refined_label, confidence = cnn.predict(item['image'])
-                new_obj = {
-                    'id': next_obj_id,
-                    'bbox': bbox,
-                    'label_history': [refined_label],
-                    'conf_history': [confidence],
-                    'missing_frames': 0,
-                    'smooth_label': refined_label,
-                    'smooth_conf': confidence,
-                    'reported': False
-                }
-            else:
-                new_obj = {
-                    'id': next_obj_id,
-                    'bbox': bbox,
-                    'label_history': [item['label']],
-                    'conf_history': [item['conf']],
-                    'missing_frames': 0,
-                    'smooth_label': item['label'],
-                    'smooth_conf': item['conf'],
-                    'reported': False
-                }
-            next_obj_id += 1
-            tracked_objects.append(new_obj)
+                
+            # 3. Store confidence and label history
+            if track_id not in track_confidences:
+                track_confidences[track_id] = []
+                track_labels[track_id] = []
+            track_confidences[track_id].append(confidence)
+            track_labels[track_id].append(refined_label)
             
-        # 3. For unmatched tracked objects, mark them as missing
-        active_tracks = []
-        for t_idx, obj in enumerate(tracked_objects):
-            if t_idx not in matched_tracked:
-                obj['missing_frames'] += 1
+            # Keep history short (last 30 frames) to limit memory growth
+            if len(track_confidences[track_id]) > 30:
+                track_confidences[track_id].pop(0)
+                track_labels[track_id].pop(0)
+                
+            # 4. Calculate average confidence and majority label (temporal smoothing)
+            avg_conf = sum(track_confidences[track_id]) / len(track_confidences[track_id])
             
-            # Interpolation hold buffer: keep drawing for up to 15 frames during camera shakes
-            if obj['missing_frames'] <= 15:
-                active_tracks.append(obj)
-        tracked_objects = active_tracks
-        
-        # 4. Render active tracks and report faults
-        for obj in tracked_objects:
-            x1, y1, x2, y2 = obj['bbox']
-            smooth_label = obj['smooth_label']
-            smooth_conf = obj['smooth_conf']
+            from collections import Counter
+            votes = Counter(track_labels[track_id])
+            majority_label = votes.most_common(1)[0][0]
             
-            # Draw green box for YOLO detection
+            # 5. Check if it represents a fault
+            is_fault = False
+            if majority_label in ["damaged", "disconnected", "misroute"]:
+                is_fault = True
+            elif "Clean" not in majority_label and "normal" not in majority_label.lower():
+                is_fault = True
+                
+            # Render green box for YOLO detection
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             
-            display_text = f"Insulator #{obj['id']}"
-            if cnn:
-                display_text += f" | CNN: {smooth_label} ({smooth_conf:.1%})"
+            # 6. Check reporting conditions:
+            # - Is a fault
+            # - Has been seen for >= 10 frames (Persistence Filter)
+            # - Has not been reported yet (Deduplication)
+            # - Average confidence is >= 50% (Avg confidence check)
+            seen_frames = track_seen_frames[track_id]
+            if is_fault:
+                # Draw thick red box for fault
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
                 
-                # Check for faults
-                is_fault = False
-                if smooth_label in ["damaged", "disconnected", "misroute"]:
-                    # Require minimum 50% confidence for fault alert
-                    if smooth_conf >= 0.50:
-                        is_fault = True
-                elif "Clean" not in smooth_label and "normal" not in smooth_label.lower():
-                    if smooth_conf >= 0.50:
-                        is_fault = True
-                        
-                if is_fault:
-                    # Draw thick red box for fault
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                    
-                    # REPORT TO WEB API ONLY ONCE per unique object ID (no duplicates)
-                    if not obj.get('reported', False):
-                        # Send report to backend Web API
-                        success = send_fault_to_backend(frame, smooth_label, smooth_conf)
+                if track_id not in reported_tracks and seen_frames >= 10:
+                    if avg_conf >= 0.50:
+                        success = send_fault_to_backend(frame, majority_label, avg_conf)
                         if success:
-                            obj['reported'] = True
+                            reported_tracks.add(track_id)
+            
+            # Draw label overlay
+            display_text = f"Track #{track_id} | {majority_label} ({avg_conf:.1%})"
+            if track_id in reported_tracks:
+                display_text += " [REPORTED]"
             else:
-                display_text += f" | {smooth_label} ({smooth_conf:.1%})"
+                display_text += f" [{seen_frames}/10]"
                 
-            # Draw label text
             cv2.putText(frame, display_text, (x1, y1 - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+        # 7. Cleanup old tracks (lost > 30 frames) to free memory
+        all_tracked_ids = list(track_seen_frames.keys())
+        for track_id in all_tracked_ids:
+            if track_id not in current_frame_track_ids:
+                track_lost_frames[track_id] = track_lost_frames.get(track_id, 0) + 1
+                
+                if track_lost_frames[track_id] > 30:
+                    track_seen_frames.pop(track_id, None)
+                    track_lost_frames.pop(track_id, None)
+                    track_confidences.pop(track_id, None)
+                    track_labels.pop(track_id, None)
+                    reported_tracks.discard(track_id)
 
         ret, buffer = cv2.imencode('.jpg', frame)
         frame_bytes = buffer.tobytes()
         
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
 
 
 @app.get("/")
@@ -310,7 +242,7 @@ async def predict_image(file: UploadFile = File(...)):
     if frame is None:
         return {"error": "Could not decode uploaded image."}
         
-    results = yolo.detect(frame)
+    results = yolo.detect(frame, persist=False)
     crops = yolo.get_crops(frame, results)
     
     detections = []

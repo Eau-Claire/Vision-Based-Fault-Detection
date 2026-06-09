@@ -7,18 +7,21 @@ class YOLODetector:
         # Load YOLOv8 model
         self.model = YOLO(model_path)
         
-    def detect(self, frame):
+    def detect(self, frame, persist=True):
         """
-        Detect objects in a frame.
-        Returns results object from ultralytics.
+        Detect and track objects in a frame using ByteTrack.
         """
-        results = self.model(frame, verbose=False)
+        if persist:
+            # Run Ultralytics tracking with ByteTrack configuration
+            results = self.model.track(frame, persist=True, tracker="bytetrack.yaml", verbose=False)
+        else:
+            results = self.model(frame, verbose=False)
         return results[0]
 
     def get_crops(self, frame, results):
         """
         Extract cropped images from the frame based on YOLO detections.
-        Returns a list of (PIL Image, Bounding Box coordinates, Class Name).
+        Returns a list of dicts containing image, bbox, label, conf, and track_id.
         """
         crops = []
         for box in results.boxes:
@@ -26,6 +29,9 @@ class YOLODetector:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             cls_id = int(box.cls[0])
             cls_name = self.model.names[cls_id]
+            
+            # Extract track_id if available
+            track_id = int(box.id.item()) if box.id is not None else None
             
             # Crop using OpenCV (BGR)
             crop_cv2 = frame[y1:y2, x1:x2]
@@ -40,7 +46,8 @@ class YOLODetector:
                 'image': crop_pil,
                 'bbox': (x1, y1, x2, y2),
                 'label': cls_name,
-                'conf': float(box.conf[0])
+                'conf': float(box.conf[0]),
+                'track_id': track_id
             })
             
         return crops
