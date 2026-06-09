@@ -19,7 +19,8 @@ DEFAULT_LEGACY_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/insula
 DEFAULT_MODEL_PATH = DEFAULT_PTH_PATH if os.path.exists(DEFAULT_PTH_PATH) else DEFAULT_LEGACY_PATH
 CNN_MODEL_PATH = os.getenv("CNN_MODEL_PATH", DEFAULT_MODEL_PATH)
 
-yolo = YOLODetector('best.pt')
+DEFAULT_YOLO_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, 'best.pt'))
+yolo = YOLODetector(DEFAULT_YOLO_PATH)
 cnn = None
 
 if os.path.exists(CNN_MODEL_PATH):
