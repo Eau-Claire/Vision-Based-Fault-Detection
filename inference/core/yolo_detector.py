@@ -22,8 +22,8 @@ class YOLODetector:
                 frame,
                 persist=True,
                 tracker=TRACKER_CFG,
-                conf=0.15,          # Low threshold – let ByteTrack filter
-                iou=0.45,
+                conf=0.35,          # Higher threshold to reduce duplicate boxes
+                iou=0.3,            # Aggressive NMS to merge overlapping boxes
                 verbose=False,
             )
         else:

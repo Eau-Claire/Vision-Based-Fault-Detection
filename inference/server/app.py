@@ -130,6 +130,26 @@ def ema_smooth(old_bbox, new_bbox, alpha=EMA_ALPHA):
     )
 
 
+def calculate_iou(boxA, boxB):
+    """Calculate Intersection over Union (IoU) of two bounding boxes."""
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+
+    interWidth = max(0, xB - xA)
+    interHeight = max(0, yB - yA)
+    interArea = interWidth * interHeight
+
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+
+    unionArea = float(boxAArea + boxBArea - interArea)
+    if unionArea == 0:
+        return 0.0
+    return interArea / unionArea
+
+
 def generate_frames():
     cap = cv2.VideoCapture(IP_CAMERA_URL)
     
@@ -146,6 +166,7 @@ def generate_frames():
     track_display_label = {}    # track_id -> smoothed majority label
     track_display_conf = {}     # track_id -> smoothed average confidence
     reported_tracks = set()     # track_ids already reported to backend
+    recently_reported = []      # list of dicts: {"bbox": (x1,y1,x2,y2), "label": str, "timestamp": float}
 
     while True:
         ok, frame = cap.read()
@@ -201,12 +222,37 @@ def generate_frames():
             track_display_label[tid] = majority_label
             track_display_conf[tid] = avg_conf
 
-            # ── Report to backend (once per track) ──
+            # ── Report to backend (once per track with spatial deduplication) ──
             if tid not in reported_tracks and track_seen[tid] >= PERSIST_FRAMES:
                 if avg_conf >= MIN_REPORT_CONF:
-                    report_ok = send_fault_to_backend(frame, majority_label, avg_conf)
-                    if report_ok:
+                    import time
+                    now = time.time()
+                    # Keep recently reported list clean
+                    recently_reported = [r for r in recently_reported if now - r["timestamp"] < 10.0]
+                    
+                    current_bbox = track_smooth_bbox[tid]
+                    is_duplicate = False
+                    
+                    for r in recently_reported:
+                        if r["label"] == majority_label:
+                            iou_score = calculate_iou(current_bbox, r["bbox"])
+                            if iou_score > 0.3:
+                                is_duplicate = True
+                                print(f"Spatial Deduplication: Track #{tid} ({majority_label}) overlaps with recently reported object (IoU: {iou_score:.2%}). Skipping report.")
+                                break
+                                
+                    if is_duplicate:
+                        # Add to reported so we don't keep checking this track
                         reported_tracks.add(tid)
+                    else:
+                        report_ok = send_fault_to_backend(frame, majority_label, avg_conf)
+                        if report_ok:
+                            reported_tracks.add(tid)
+                            recently_reported.append({
+                                "bbox": current_bbox,
+                                "label": majority_label,
+                                "timestamp": now
+                            })
 
         # ── Update lost counters for tracks NOT seen this frame ──
         for tid in list(track_seen.keys()):
