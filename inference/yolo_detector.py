@@ -1,6 +1,11 @@
 from ultralytics import YOLO
 import cv2
 from PIL import Image
+import os
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRACKER_CFG = os.path.join(SCRIPT_DIR, "bytetrack_custom.yaml")
+
 
 class YOLODetector:
     def __init__(self, model_path='yolov8n.pt'):
@@ -10,12 +15,19 @@ class YOLODetector:
     def detect(self, frame, persist=True):
         """
         Detect and track objects in a frame using ByteTrack.
+        Uses lower conf threshold (0.15) to keep detections stable across frames.
         """
         if persist:
-            # Run Ultralytics tracking with ByteTrack configuration
-            results = self.model.track(frame, persist=True, tracker="bytetrack.yaml", verbose=False)
+            results = self.model.track(
+                frame,
+                persist=True,
+                tracker=TRACKER_CFG,
+                conf=0.15,          # Low threshold – let ByteTrack filter
+                iou=0.45,
+                verbose=False,
+            )
         else:
-            results = self.model(frame, verbose=False)
+            results = self.model(frame, conf=0.25, verbose=False)
         return results[0]
 
     def get_crops(self, frame, results):

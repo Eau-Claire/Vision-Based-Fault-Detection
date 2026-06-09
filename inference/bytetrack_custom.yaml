@@ -1,0 +1,10 @@
+# Custom ByteTrack config – tuned for drone / shaky camera
+# Higher thresholds = fewer false tracks; larger buffer = longer memory
+
+tracker_type: bytetrack
+track_high_thresh: 0.15       # Lower to accept weaker detections into tracks
+track_low_thresh: 0.05        # Very low second-stage to recover lost tracks
+new_track_thresh: 0.3         # Higher to avoid starting junk tracks
+track_buffer: 60              # Keep lost tracks alive for 60 frames (~2 sec @ 30fps)
+match_thresh: 0.7             # Slightly tighter IoU matching
+fuse_score: True

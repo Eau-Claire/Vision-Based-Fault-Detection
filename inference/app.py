@@ -9,7 +9,6 @@ from cnn_classifier import CNNClassifier
 import os
 import requests
 import json
-import time
 from collections import Counter
 
 app = FastAPI(title="UAV Fault Detection Real-time API")
@@ -43,11 +42,13 @@ else:
 # ──────────────────────────────────────────────────────────────────────
 # Tuning constants
 # ──────────────────────────────────────────────────────────────────────
-PERSIST_FRAMES = 5          # Minimum frames a track must be seen before reporting
-HOLD_FRAMES = 8             # How long to keep drawing a lost box (interpolation)
-CLEANUP_FRAMES = 20         # Remove track state after this many lost frames
+PERSIST_FRAMES = 5          # Minimum frames before reporting
+HOLD_FRAMES = 15            # Keep drawing a lost box for this many frames
+CLEANUP_FRAMES = 40         # Remove track state after this many lost frames
 MIN_REPORT_CONF = 0.40      # Minimum average confidence to report
 HISTORY_LEN = 15            # Rolling history window length
+EMA_ALPHA = 0.3             # Exponential moving average factor for box smoothing
+                            # Lower = smoother but slower to react; higher = snappier
 
 
 def send_fault_to_backend(frame, label, confidence):
@@ -112,6 +113,16 @@ def send_fault_to_backend(frame, label, confidence):
         return False
 
 
+def ema_smooth(old_bbox, new_bbox, alpha=EMA_ALPHA):
+    """Exponential moving average to smooth bounding box coordinates."""
+    if old_bbox is None:
+        return new_bbox
+    return tuple(
+        int(alpha * n + (1 - alpha) * o)
+        for o, n in zip(old_bbox, new_bbox)
+    )
+
+
 def generate_frames():
     cap = cv2.VideoCapture(IP_CAMERA_URL)
     
@@ -122,7 +133,7 @@ def generate_frames():
     # ── Per-track state ──
     track_seen = {}             # track_id -> total frames seen
     track_lost = {}             # track_id -> consecutive frames lost
-    track_bbox = {}             # track_id -> last known (x1, y1, x2, y2)
+    track_smooth_bbox = {}      # track_id -> EMA-smoothed (x1, y1, x2, y2)
     track_conf_hist = {}        # track_id -> list of recent confidences
     track_label_hist = {}       # track_id -> list of recent labels
     track_display_label = {}    # track_id -> smoothed majority label
@@ -146,7 +157,7 @@ def generate_frames():
             if tid is None:
                 continue
 
-            x1, y1, x2, y2 = item['bbox']
+            raw_bbox = item['bbox']       # (x1, y1, x2, y2) from YOLO
             yolo_label = item['label']
             yolo_conf = item['conf']
 
@@ -155,7 +166,11 @@ def generate_frames():
             # Update counters
             track_seen[tid] = track_seen.get(tid, 0) + 1
             track_lost[tid] = 0
-            track_bbox[tid] = (x1, y1, x2, y2)
+
+            # ── EMA smooth the bounding box ──
+            track_smooth_bbox[tid] = ema_smooth(
+                track_smooth_bbox.get(tid), raw_bbox
+            )
 
             # CNN refinement (only for insulator crops)
             label = yolo_label
@@ -186,22 +201,24 @@ def generate_frames():
                     if report_ok:
                         reported_tracks.add(tid)
 
-        # ── Draw boxes ──
+        # ── Update lost counters for tracks NOT seen this frame ──
         for tid in list(track_seen.keys()):
-            # Increment lost counter for tracks not seen this frame
             if tid not in seen_this_frame:
                 track_lost[tid] = track_lost.get(tid, 0) + 1
 
-            # Skip drawing if lost too long
+        # ── Draw boxes (using smoothed coordinates) ──
+        for tid in list(track_seen.keys()):
             lost_count = track_lost.get(tid, 0)
+
+            # Skip if lost too long
             if lost_count > HOLD_FRAMES:
                 continue
 
             # Need cached info to draw
-            if tid not in track_bbox or tid not in track_display_label:
+            if tid not in track_smooth_bbox or tid not in track_display_label:
                 continue
 
-            bx1, by1, bx2, by2 = track_bbox[tid]
+            bx1, by1, bx2, by2 = track_smooth_bbox[tid]
             lbl = track_display_label[tid]
             cnf = track_display_conf[tid]
 
@@ -222,13 +239,13 @@ def generate_frames():
 
             cv2.rectangle(frame, (bx1, by1), (bx2, by2), color, thick)
             text = f"#{tid} {lbl} ({cnf:.0%}){tag}"
-            cv2.putText(frame, text, (bx1, by1 - 8),
+            cv2.putText(frame, text, (bx1, max(by1 - 8, 15)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
 
         # ── Cleanup stale tracks ──
         for tid in list(track_seen.keys()):
             if track_lost.get(tid, 0) > CLEANUP_FRAMES:
-                for d in (track_seen, track_lost, track_bbox,
+                for d in (track_seen, track_lost, track_smooth_bbox,
                           track_conf_hist, track_label_hist,
                           track_display_label, track_display_conf):
                     d.pop(tid, None)
