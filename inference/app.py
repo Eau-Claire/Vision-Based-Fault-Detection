@@ -13,7 +13,10 @@ app = FastAPI(title="UAV Fault Detection Real-time API")
 IP_CAMERA_URL = os.getenv("IP_CAMERA_URL", "0")
 
 # Check if best_model.pth exists, otherwise fallback to legacy insulator_cnn.pth
-DEFAULT_MODEL_PATH = "../models/best_model.pth" if os.path.exists("../models/best_model.pth") else "../models/insulator_cnn.pth"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_PTH_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/best_model.pth"))
+DEFAULT_LEGACY_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/insulator_cnn.pth"))
+DEFAULT_MODEL_PATH = DEFAULT_PTH_PATH if os.path.exists(DEFAULT_PTH_PATH) else DEFAULT_LEGACY_PATH
 CNN_MODEL_PATH = os.getenv("CNN_MODEL_PATH", DEFAULT_MODEL_PATH)
 
 yolo = YOLODetector('best.pt')

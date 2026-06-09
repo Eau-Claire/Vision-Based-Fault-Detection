@@ -15,7 +15,9 @@ load_dotenv()
 # =====================================================================
 # Gateway (Raspberry Pi 4) configurations
 IP_CAMERA_URL = os.getenv("IP_CAMERA_URL", "0")  # Camera stream source (0 = webcam)
-ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", "../models/best_model.onnx")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_ONNX_PATH = os.path.abspath(os.path.join(SCRIPT_DIR, "../models/best_model.onnx"))
+ONNX_MODEL_PATH = os.getenv("ONNX_MODEL_PATH", DEFAULT_ONNX_PATH)
 
 # Ocelot Gateway and Service configurations
 OCELOT_GATEWAY_URL = os.getenv("OCELOT_GATEWAY_URL", "http://localhost:5000")

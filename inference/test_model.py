@@ -5,8 +5,11 @@ from PIL import Image
 from cnn_classifier import CNNClassifier
 
 def main():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_model = os.path.abspath(os.path.join(script_dir, "../models/best_model.pth"))
+    
     parser = argparse.ArgumentParser(description="Test the CNN Classifier (ResNet50 + MLP or MobileNetV3)")
-    parser.add_argument("--model", type=str, default="../models/best_model.pth", help="Path to the model .pth file")
+    parser.add_argument("--model", type=str, default=default_model, help="Path to the model .pth file")
     parser.add_argument("--image", type=str, required=True, help="Path to a test image or directory of images")
     parser.add_argument("--device", type=str, default="cpu", help="Compute device ('cpu' or 'cuda')")
     args = parser.parse_args()
