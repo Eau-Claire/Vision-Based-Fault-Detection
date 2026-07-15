@@ -112,7 +112,7 @@ def setup_logging(
     Returns:
         Configured root logger.
     """
-    logger = logging.getLogger(service_name)
+    logger = logging.getLogger()
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     # Clear existing handlers
@@ -127,10 +127,6 @@ def setup_logging(
         handler.setFormatter(ReadableFormatter())
 
     logger.addHandler(handler)
-
-    # Prevent propagation to root to avoid duplicate logs
-    logger.propagate = False
-
     return logger
 
 
