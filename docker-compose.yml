@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ai_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  edge_raspberry:
+    build:
+      context: .
+      dockerfile: edge_raspberry/Dockerfile
+    container_name: ai_edge_raspberry
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    environment:
+      - DEVICE_PROFILE=edge
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+      - CALLBACK_BASE_URL=http://host.docker.internal:5000
+      - AI_SERVICE_KEY=AI-Service-Secret-Token-Key-12345
+      - CONFIDENCE_THRESHOLD=0.25
+    volumes:
+      - ./models:/app/models
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  server_pc:
+    build:
+      context: .
+      dockerfile: server_pc/Dockerfile
+    container_name: ai_server_pc
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    environment:
+      - DEVICE_PROFILE=server
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+      - CALLBACK_BASE_URL=http://host.docker.internal:5000
+      - AI_SERVICE_KEY=AI-Service-Secret-Token-Key-12345
+      - CONFIDENCE_THRESHOLD=0.30
+      - RFDETR_DEVICE=auto
+    volumes:
+      - ./models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  rabbitmq_data:

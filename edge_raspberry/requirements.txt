@@ -1,0 +1,23 @@
+# Edge Raspberry Pi — YOLO11 Runtime Dependencies
+# Optimized for ARM64 / CPU-only inference
+
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+pydantic==2.11.3
+pydantic-settings==2.9.1
+python-dotenv==1.1.0
+
+# AI / ML (CPU-only, lightweight)
+ultralytics==8.3.147
+opencv-python-headless==4.11.0.86
+numpy>=1.24.0,<2.0.0
+Pillow>=10.0.0
+
+# Messaging
+pika==1.3.2
+
+# HTTP
+requests>=2.31.0
+
+# Logging
+python-json-logger>=2.0.0
