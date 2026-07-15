@@ -28,8 +28,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    expose:
-      - "8002"
+    ports:
+      - "127.0.0.1:8002:8002"
     environment:
       - DEVICE_PROFILE=server
       - RABBITMQ_HOST=rabbitmq
@@ -45,23 +45,5 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  caddy:
-    image: caddy:2-alpine
-    container_name: ai_caddy_prod
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-      - caddy_logs:/var/log/caddy
-    depends_on:
-      - server_pc
-
 volumes:
   rabbitmq_prod_data:
-  caddy_data:
-  caddy_config:
-  caddy_logs:

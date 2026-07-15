@@ -1,65 +1,67 @@
-# Deployment Plan: Vision-Based AI Service with SSL (Caddy CLI)
+# Deployment Plan: Vision-Based AI Service with Host Nginx & Certbot
 
-This guide outlines the production deployment of the Vision-Based AI Service (`server_pc`) under the domain name **`pms-ai.duckdns.org`** using Caddy to handle automatic SSL (HTTPS) provisioning entirely from the command line.
-
----
-
-## 📋 Prerequisites
-
-1. **Docker & Docker Compose**: `docker` and `docker-compose` or `docker compose` CLI.
-2. **Ports Free**: Ensure ports **80** (HTTP) and **443** (HTTPS) are not in use by any other web server (like Nginx, Apache, or Nginx Proxy Manager).
-3. **DuckDNS Configuration**: Update your `pms-ai.duckdns.org` domain to point to the host machine's public IP address.
-4. **Firewall / Port Forwarding**: Ports **80** and **443** must be open and forwarded to this host machine.
+This guide outlines how to deploy the Vision-Based AI Service (`server_pc`) on port `8002` and configure your host's existing **Nginx** server to reverse proxy the subdomain **`pms-ai.duckdns.org`** with HTTPS/SSL using **Certbot**.
 
 ---
 
 ## 🛠️ Step-by-Step Deployment
 
-### 1. Release Ports 80 & 443
-If Nginx Proxy Manager or another container is holding the ports, stop it:
+### 1. Build and Start the AI Service
+Run the following command in the root folder of the project on your server to pull, build, and start the AI service. The FastAPI application will run on port `8002` (bound to `127.0.0.1` for security so only Nginx can access it):
 ```bash
-docker stop npm
+git pull origin main
+docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
-### 2. Configure the Environment
-Ensure your `.env` file in the root directory contains the production-ready keys:
-```env
-DEVICE_PROFILE=server
-ROBOFLOW_API_KEY=3VRKN4GLeDVKPJ9eQFkG
-RABBITMQ_HOST=rabbitmq
-RABBITMQ_PORT=5672
-RABBITMQ_USER=guest
-RABBITMQ_PASS=guest
-AI_SERVICE_KEY=Reme8lqiErnO9ZppU0SeNattf4ObRvbv
-CALLBACK_BASE_URL=https://uavpms.ddns.net
+### 2. Configure Host Nginx
+Create a new configuration file for the AI service in your host's Nginx configuration directory:
+```bash
+sudo nano /etc/nginx/sites-available/pms-ai.duckdns.org
 ```
 
-### 3. Deploy the Containers (RabbitMQ, AI Service, Caddy SSL)
-Run the single command to pull, build, and start all services:
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
+Paste the following Nginx configuration inside:
+```nginx
+server {
+    listen 80;
+    server_name pms-ai.duckdns.org;
+
+    location / {
+        proxy_pass http://127.0.0.1:8002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
 ```
+
+Enable the configuration by creating a symlink to `sites-enabled`:
+```bash
+sudo ln -s /etc/nginx/sites-available/pms-ai.duckdns.org /etc/nginx/sites-enabled/
+```
+
+Test the Nginx configuration for syntax errors and restart Nginx:
+```bash
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### 3. Generate SSL Certificate with Certbot
+Run Certbot on the host to automatically request, download, and configure the SSL certificate for your subdomain:
+```bash
+sudo certbot --nginx -d pms-ai.duckdns.org
+```
+*Note: Certbot will ask if you want to redirect HTTP traffic to HTTPS. Select **2** (Redirect) to enforce SSL.*
 
 ---
 
 ## 🔍 Verification
 
-Once the containers start up, Caddy will automatically negotiate SSL with Let's Encrypt for `pms-ai.duckdns.org`.
-
-### 1. Check Container Health
-```bash
-docker compose -f docker-compose.prod.yml ps
-```
-
-### 2. Monitor SSL Provisioning Logs
-To verify that Let's Encrypt successfully issued the SSL certificate:
-```bash
-docker logs -f ai_caddy_prod
-```
-*Look for logs saying: `authorization: awaiting challenge`, `validating challenge`, `certificate obtained successfully`.*
-
-### 3. Test HTTPs Endpoint
-Verify the setup using curl from any machine:
+Verify that the secure HTTPS endpoint is reachable and returning a status of ready:
 ```bash
 curl -i https://pms-ai.duckdns.org/ready
 ```

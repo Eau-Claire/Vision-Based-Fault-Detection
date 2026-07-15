@@ -1,7 +1,0 @@
-pms-ai.duckdns.org {
-    reverse_proxy server_pc:8002
-
-    log {
-        output file /var/log/caddy/access.log
-    }
-}
