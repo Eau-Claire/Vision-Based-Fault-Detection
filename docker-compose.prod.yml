@@ -42,13 +42,8 @@ services:
       - RFDETR_DEVICE=auto
     volumes:
       - ./models:/app/models
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   caddy:
     image: caddy:2-alpine
