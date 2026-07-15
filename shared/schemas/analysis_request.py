@@ -15,6 +15,10 @@ class MediaType(str, Enum):
 
 
 class AnalysisType(str, Enum):
+    DEFECT_DETECTION = "DefectDetection"
+    HUMAN_MOTION_DETECTION = "HumanMotionDetection"
+    OBJECT_CLASSIFICATION = "ObjectClassification"
+    ASSET_CONDITION_ASSESSMENT = "AssetConditionAssessment"
     GENERAL = "General"
     DETAILED = "Detailed"
     URGENT = "Urgent"
