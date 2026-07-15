@@ -119,12 +119,7 @@ class RabbitMQClient:
         ch.queue_bind(
             queue=edge_queue,
             exchange=backend_exchange,
-            routing_key="identity.event.aianalysisrequestedevent",
-        )
-        ch.queue_bind(
-            queue=edge_queue,
-            exchange=backend_exchange,
-            routing_key="identity.event.imageuploadedevent",
+            routing_key="identity.event.aianalysisrequestedevent.edge",
         )
 
         # Server queue with dead-letter routing
@@ -143,12 +138,7 @@ class RabbitMQClient:
         ch.queue_bind(
             queue=server_queue,
             exchange=backend_exchange,
-            routing_key="identity.event.aianalysisrequestedevent",
-        )
-        ch.queue_bind(
-            queue=server_queue,
-            exchange=backend_exchange,
-            routing_key="identity.event.imageuploadedevent",
+            routing_key="identity.event.aianalysisrequestedevent.server",
         )
 
         logger.info(

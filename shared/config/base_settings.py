@@ -6,7 +6,7 @@ Runtime-specific modules extend this with additional settings.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, model_validator
 from typing import Optional
 
 
@@ -43,9 +43,7 @@ class BaseAppSettings(BaseSettings):
     callback_path: str = Field(
         "/api/internal/ai-analysis/results", alias="CALLBACK_PATH"
     )
-    ai_service_key: str = Field(
-        "AI-Service-Secret-Token-Key-12345", alias="AI_SERVICE_KEY"
-    )
+    ai_service_key: str = Field("", alias="AI_SERVICE_KEY")
 
     # ── Callback Retry ──
     callback_max_retries: int = Field(3, alias="CALLBACK_MAX_RETRIES")
@@ -64,7 +62,7 @@ class BaseAppSettings(BaseSettings):
     )
 
     # ── Security ──
-    allow_private_ips: bool = Field(True, alias="ALLOW_PRIVATE_IPS")
+    allow_private_ips: bool = Field(False, alias="ALLOW_PRIVATE_IPS")
     restrict_callback_to_base_url: bool = Field(True, alias="RESTRICT_CALLBACK_TO_BASE_URL")
 
     # ── Inference ──
@@ -86,6 +84,14 @@ class BaseAppSettings(BaseSettings):
         "extra": "ignore",
         "populate_by_name": True,
     }
+
+    @model_validator(mode="after")
+    def validate_security_settings(self):
+        if not self.ai_service_key:
+            raise ValueError("AI_SERVICE_KEY must be configured")
+        if self.ai_service_key == "AI-Service-Secret-Token-Key-12345":
+            raise ValueError("AI_SERVICE_KEY must not use the sample development secret")
+        return self
 
     @property
     def callback_url(self) -> str:

@@ -9,8 +9,8 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?RABBITMQ_USER is required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?RABBITMQ_PASS is required}
     volumes:
       - rabbitmq_prod_data:/var/lib/rabbitmq
     healthcheck:
@@ -34,12 +34,13 @@ services:
       - DEVICE_PROFILE=server
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
-      - RABBITMQ_PASS=${RABBITMQ_PASS:-guest}
-      - CALLBACK_BASE_URL=${CALLBACK_BASE_URL:-https://uavpms.ddns.net}
-      - AI_SERVICE_KEY=${AI_SERVICE_KEY:-Reme8lqiErnO9ZppU0SeNattf4ObRvbv}
+      - RABBITMQ_USER=${RABBITMQ_USER:?RABBITMQ_USER is required}
+      - RABBITMQ_PASS=${RABBITMQ_PASS:?RABBITMQ_PASS is required}
+      - CALLBACK_BASE_URL=${CALLBACK_BASE_URL:?CALLBACK_BASE_URL is required}
+      - AI_SERVICE_KEY=${AI_SERVICE_KEY:?AI_SERVICE_KEY is required}
       - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.30}
       - RFDETR_DEVICE=auto
+      - ALLOW_PRIVATE_IPS=${ALLOW_PRIVATE_IPS:-false}
     volumes:
       - ./models:/app/models
     extra_hosts:

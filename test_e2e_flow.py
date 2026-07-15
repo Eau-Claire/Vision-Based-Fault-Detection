@@ -1,12 +1,25 @@
+import os
 import sys
 import requests
 import io
 import time
-import jwt
+import base64
+import hashlib
+import hmac
+import json
 
-BASE_URL = "http://localhost:5194"
-SERVICE_KEY = "Reme8lqiErnO9ZppU0SeNattf4ObRvbv"
-JWT_SECRET = "MzUfGom64CuJiOwIoGB64kWDwJ3nG7yZB4wYbqKFszT"
+BASE_URL = os.getenv("PMS_BASE_URL", "http://localhost:5194")
+SERVICE_KEY = os.getenv("AI_SERVICE_KEY")
+JWT_SECRET = os.getenv("PMS_JWT_SECRET")
+TEST_USER_ID = os.getenv("PMS_TEST_USER_ID", "469bfac4-8b96-4f27-a772-945cff2fbaa8")
+TEST_USERNAME = os.getenv("PMS_TEST_USERNAME", "minhchau")
+TEST_EMAIL = os.getenv("PMS_TEST_EMAIL", "phamhoangminhchau1973@gmail.com")
+TEST_FULLNAME = os.getenv("PMS_TEST_FULLNAME", "Minh Châu")
+
+if not SERVICE_KEY:
+    raise RuntimeError("AI_SERVICE_KEY must be set for E2E callback authentication")
+if not JWT_SECRET:
+    raise RuntimeError("PMS_JWT_SECRET must be set to generate the E2E JWT")
 
 # Minimal 1x1 black JPEG
 DUMMY_JPEG = (
@@ -20,16 +33,34 @@ DUMMY_JPEG = (
 
 # Dynamically generate token valid for 1 day
 payload = {
-    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier": "469bfac4-8b96-4f27-a772-945cff2fbaa8",
-    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name": "minhchau",
-    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": "phamhoangminhchau1973@gmail.com",
-    "fullname": "Minh Châu",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier": TEST_USER_ID,
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name": TEST_USERNAME,
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": TEST_EMAIL,
+    "fullname": TEST_FULLNAME,
     "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": "SystemAdmin",
     "exp": int(time.time()) + 86400,
     "iss": "UavPms.Api",
     "aud": "UavPms.Client"
 }
-TOKEN = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+def _base64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _create_hs256_jwt(claims: dict, secret: str) -> str:
+    header = {"alg": "HS256", "typ": "JWT"}
+    signing_input = ".".join(
+        [
+            _base64url(json.dumps(header, separators=(",", ":")).encode("utf-8")),
+            _base64url(json.dumps(claims, separators=(",", ":")).encode("utf-8")),
+        ]
+    )
+    signature = hmac.new(
+        secret.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256
+    ).digest()
+    return f"{signing_input}.{_base64url(signature)}"
+
+
+TOKEN = _create_hs256_jwt(payload, JWT_SECRET)
 
 def run_e2e_flow():
     print("=== STARTING END-TO-END WORKFLOW INTEGRATION TEST ===")
@@ -46,7 +77,7 @@ def run_e2e_flow():
     mission_payload = {
         "title": "Post-flight Drone Inspection MS-E2E",
         "routeData": "Line-A-Towers-1-5",
-        "assignedToUserId": "469bfac4-8b96-4f27-a772-945cff2fbaa8",
+        "assignedToUserId": TEST_USER_ID,
         "droneCode": "UAV001",
         "status": "In Progress",
         "description": "E2E verification of AI workflow and completion evidence"
@@ -64,11 +95,10 @@ def run_e2e_flow():
     print("\n[Step 3] Uploading post-flight drone image for AI analysis...")
     upload_ai_url = f"{BASE_URL}/api/v1/missions/{mission_id}/ai-analysis"
     
-    files = {
-        "file": ("drone_flight_frame.jpg", io.BytesIO(DUMMY_JPEG), "image/jpeg")
-    }
+    files = [
+        ("files", ("drone_flight_frame.jpg", io.BytesIO(DUMMY_JPEG), "image/jpeg"))
+    ]
     data = {
-        "assetId": "00000000-0000-0000-0000-000000000000",
         "analysisType": "DefectDetection",
         "preferredModel": "SERVER",
         "notes": "E2E automated test upload"
@@ -80,8 +110,14 @@ def run_e2e_flow():
         sys.exit(1)
         
     upload_response = r.json()
-    request_id = upload_response.get("data", {}).get("id")
-    print(f"✅ AI analysis request created. RequestId: {request_id}")
+    upload_data = upload_response.get("data", {})
+    request_ids = upload_data.get("requestIds") or []
+    request_id = request_ids[0] if request_ids else None
+    batch_id = upload_data.get("batchId")
+    if not request_id:
+        print(f"❌ Upload response did not contain requestIds: {upload_response}")
+        sys.exit(1)
+    print(f"✅ AI analysis batch created. BatchId: {batch_id}; RequestId: {request_id}")
 
     # 4. Query Media ID from inspections history
     print("\n[Step 4] Querying Media ID for the uploaded file...")
@@ -186,7 +222,7 @@ def run_e2e_flow():
     update_payload = {
         "title": "Post-flight Drone Inspection MS-E2E",
         "routeData": "Line-A-Towers-1-5",
-        "assignedToUserId": "469bfac4-8b96-4f27-a772-945cff2fbaa8",
+        "assignedToUserId": TEST_USER_ID,
         "droneCode": "UAV001",
         "status": "Completed",
         "description": "E2E verification of AI workflow and completion evidence - CLOSED"
