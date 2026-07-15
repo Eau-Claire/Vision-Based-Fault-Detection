@@ -1,22 +1,27 @@
-# Deployment Plan: Vision-Based AI Service with SSL (Nginx Proxy Manager)
+# Deployment Plan: Vision-Based AI Service with SSL (Caddy CLI)
 
-This guide outlines the production deployment of the Vision-Based AI Service (`server_pc`) under the domain name **`pms-ai.duckdns.org`** with automatic SSL (HTTPS) enabled using your existing **Nginx Proxy Manager**.
+This guide outlines the production deployment of the Vision-Based AI Service (`server_pc`) under the domain name **`pms-ai.duckdns.org`** using Caddy to handle automatic SSL (HTTPS) provisioning entirely from the command line.
 
 ---
 
 ## 📋 Prerequisites
 
-Before starting, ensure the host machine has the following:
-1. **Docker & Docker Compose**: `docker` version 20.10+ and `docker-compose` or `docker compose` CLI.
-2. **Ports Open**: Port **8002** (FastAPI) is mapped from the container to the host.
+1. **Docker & Docker Compose**: `docker` and `docker-compose` or `docker compose` CLI.
+2. **Ports Free**: Ensure ports **80** (HTTP) and **443** (HTTPS) are not in use by any other web server (like Nginx, Apache, or Nginx Proxy Manager).
 3. **DuckDNS Configuration**: Update your `pms-ai.duckdns.org` domain to point to the host machine's public IP address.
-4. **Nginx Proxy Manager (NPM)**: Running on ports 80 and 443 (already confirmed).
+4. **Firewall / Port Forwarding**: Ports **80** and **443** must be open and forwarded to this host machine.
 
 ---
 
 ## 🛠️ Step-by-Step Deployment
 
-### 1. Configure the Environment
+### 1. Release Ports 80 & 443
+If Nginx Proxy Manager or another container is holding the ports, stop it:
+```bash
+docker stop npm
+```
+
+### 2. Configure the Environment
 Ensure your `.env` file in the root directory contains the production-ready keys:
 ```env
 DEVICE_PROFILE=server
@@ -29,47 +34,39 @@ AI_SERVICE_KEY=Reme8lqiErnO9ZppU0SeNattf4ObRvbv
 CALLBACK_BASE_URL=https://uavpms.ddns.net
 ```
 
-### 2. Start the Production Services
-Run the following command to build the image and start the containers in the background:
+### 3. Deploy the Containers (RabbitMQ, AI Service, Caddy SSL)
+Run the single command to pull, build, and start all services:
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
-*Note: This will start RabbitMQ and the AI service server, exposing port `8002` to the host.*
-
-### 3. Route Traffic through Nginx Proxy Manager (SSL)
-Open your Nginx Proxy Manager Dashboard (usually on port `81`, e.g., `http://your-server-ip:81`) and add a new **Proxy Host**:
-
-1. **Details Tab**:
-   - **Domain Names**: `pms-ai.duckdns.org`
-   - **Scheme**: `http`
-   - **Forward Hostname / IP**: `127.0.0.1` (or the local IP of the host machine)
-   - **Forward Port**: `8002`
-   - **Block Common Exploits**: Enabled
-   - **Websockets Support**: Enabled (optional)
-
-2. **SSL Tab**:
-   - **SSL Certificate**: Select **Request a new SSL Certificate** (Let's Encrypt)
-   - **Force SSL**: Enabled
-   - **HTTP/2 Support**: Enabled
-   - **I Agree to the Let's Encrypt Terms of Service**: Enabled
-   - Save the host!
 
 ---
 
 ## 🔍 Verification
 
-Once Nginx Proxy Manager finishes requesting the certificate:
+Once the containers start up, Caddy will automatically negotiate SSL with Let's Encrypt for `pms-ai.duckdns.org`.
 
-### Test API Connectivity
+### 1. Check Container Health
+```bash
+docker compose -f docker-compose.prod.yml ps
+```
 
-1. **Verify Readiness Endpoint (HTTPS)**
-   ```bash
-   curl -i https://pms-ai.duckdns.org/ready
-   ```
-   **Expected Response:**
-   ```json
-   HTTP/2 200
-   content-type: application/json
-   ...
-   {"status":"ready","runtime":"server_pc","model_name":"RF-DETR-Base","model_version":"1.0.0"}
-   ```
+### 2. Monitor SSL Provisioning Logs
+To verify that Let's Encrypt successfully issued the SSL certificate:
+```bash
+docker logs -f ai_caddy_prod
+```
+*Look for logs saying: `authorization: awaiting challenge`, `validating challenge`, `certificate obtained successfully`.*
+
+### 3. Test HTTPs Endpoint
+Verify the setup using curl from any machine:
+```bash
+curl -i https://pms-ai.duckdns.org/ready
+```
+**Expected Response:**
+```json
+HTTP/2 200
+content-type: application/json
+...
+{"status":"ready","runtime":"server_pc","model_name":"RF-DETR-Base","model_version":"1.0.0"}
+```
