@@ -2,9 +2,11 @@ import sys
 import requests
 import io
 import time
+import jwt
 
 BASE_URL = "http://localhost:5194"
 SERVICE_KEY = "Reme8lqiErnO9ZppU0SeNattf4ObRvbv"
+JWT_SECRET = "MzUfGom64CuJiOwIoGB64kWDwJ3nG7yZB4wYbqKFszT"
 
 # Minimal 1x1 black JPEG
 DUMMY_JPEG = (
@@ -16,16 +18,18 @@ DUMMY_JPEG = (
     b'\x00?\x00\xbf\x00\xff\xd9'
 )
 
-TOKEN = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L"
-    "2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjQ2OWJmYWM0LThiOTYtNGYyNy1hNzcyLTk0NWNmZjJmYm"
-    "FhOCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL25hbWUiOiJ"
-    "taW5oY2hhdSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2Vt"
-    "YWlsYWRkcmVzcyI6InBoYW1ob2FuZ21pbmhjaGF1MTk3M0BnbWFpbC5jb20iLCJmdWxsbmFtZSI6Ik1pbmggQ2jDo"
-    "nUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOi"
-    "JTeXN0ZW1BZG1pbiIsImV4cCI6MTc4NDEyNDUwNSwiaXNzIjoiVWF2UG1zLkFwaSIsImF1ZCI6IlVhdlBtcy5DbGl"
-    "lbnQifQ.GH9zMwg1i8qqYlZSyF6PtDOiAHxxWyfD-Xl3KT9y8LQ"
-)
+# Dynamically generate token valid for 1 day
+payload = {
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier": "469bfac4-8b96-4f27-a772-945cff2fbaa8",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name": "minhchau",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": "phamhoangminhchau1973@gmail.com",
+    "fullname": "Minh Châu",
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/role": "SystemAdmin",
+    "exp": int(time.time()) + 86400,
+    "iss": "UavPms.Api",
+    "aud": "UavPms.Client"
+}
+TOKEN = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 def run_e2e_flow():
     print("=== STARTING END-TO-END WORKFLOW INTEGRATION TEST ===")
