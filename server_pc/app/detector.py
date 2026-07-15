@@ -107,22 +107,80 @@ class ServerRfDetrDetector:
         try:
             # Try rfdetr package (pip install rfdetr)
             from rfdetr import RFDETRBase, RFDETRLarge
+            import torch
+            import math
+
+            # Default parameters
+            num_classes = None
+            resolution = self._image_size
+            patch_size = 14
+            state_dict = None
+
+            # Load checkpoint first to infer parameters if file exists
+            if model_path and os.path.exists(model_path):
+                logger.info(f"Analyzing custom weights file to infer architecture: {model_path}")
+                checkpoint = torch.load(model_path, map_location="cpu")
+                state_dict = checkpoint.get("model", checkpoint)
+
+                # Infer patch_size
+                for k, v in state_dict.items():
+                    if "patch_embeddings.projection.weight" in k:
+                        patch_size = v.shape[2]
+                        break
+
+                # Infer num_classes
+                for k, v in state_dict.items():
+                    if "class_embed.weight" in k:
+                        num_classes = v.shape[0] - 1
+                        break
+
+                # Infer resolution
+                for k, v in state_dict.items():
+                    if "position_embeddings" in k:
+                        num_patches = v.shape[1] - 1
+                        resolution = int(math.sqrt(num_patches) * patch_size)
+                        break
+
+                logger.info(
+                    f"Inferred checkpoint parameters: patch_size={patch_size}, "
+                    f"num_classes={num_classes}, resolution={resolution}"
+                )
+
+            # Build kwargs for the constructor
+            constructor_kwargs = {
+                "resolution": resolution,
+                "patch_size": patch_size,
+                "pretrain_weights": None, # Bypass default weights validation/download
+            }
+            if num_classes is not None:
+                constructor_kwargs["num_classes"] = num_classes
 
             if "large" in model_path.lower():
-                self._model = RFDETRLarge()
+                self._model = RFDETRLarge(**constructor_kwargs)
                 self._model_name = "RF-DETR-Large"
             else:
-                self._model = RFDETRBase()
+                self._model = RFDETRBase(**constructor_kwargs)
                 self._model_name = "RF-DETR-Base"
 
-            # Load custom weights if provided and file exists
-            if model_path and os.path.exists(model_path):
-                import torch
-                state_dict = torch.load(
-                    model_path, map_location=self._device
-                )
-                self._model.model.load_state_dict(state_dict, strict=False)
-                logger.info(f"Loaded custom weights from: {model_path}")
+            # Load custom weights if state_dict is available
+            if state_dict is not None:
+                # Filter out keys with size mismatch to avoid PyTorch RuntimeError
+                model_state = self._model.model.model.state_dict()
+                filtered_state_dict = {}
+                for k, v in state_dict.items():
+                    if k in model_state:
+                        if v.shape == model_state[k].shape:
+                            filtered_state_dict[k] = v
+                        else:
+                            logger.warning(
+                                f"Skipping key '{k}' due to size mismatch: "
+                                f"checkpoint {list(v.shape)} vs model {list(model_state[k].shape)}"
+                            )
+                    else:
+                        logger.warning(f"Skipping unexpected key '{k}' from checkpoint")
+
+                self._model.model.model.load_state_dict(filtered_state_dict, strict=False)
+                logger.info(f"Successfully loaded custom weights from: {model_path}")
 
             logger.info("Using rfdetr package for inference")
             self._backend = "rfdetr"
