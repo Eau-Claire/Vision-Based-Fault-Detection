@@ -10,11 +10,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install Python 3.11 and system dependencies
+# Install Python 3 and system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.11 \
-        python3.11-venv \
+        python3 \
+        python3-venv \
         python3-pip \
         libgl1-mesa-glx \
         libglib2.0-0 \
@@ -22,7 +22,7 @@ RUN apt-get update && \
         libxext6 \
         libxrender-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python
+    && ln -sf /usr/bin/python3 /usr/bin/python
 
 # Copy requirements and install dependencies
 COPY server_pc/requirements.txt /app/server_pc/requirements.txt
