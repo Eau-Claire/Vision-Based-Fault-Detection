@@ -78,15 +78,16 @@ python3 -m edge_raspberry.app.main
 ```
 Ứng dụng sẽ lắng nghe tại cổng `8001`.
 
-#### Khởi chạy Server Module (Harness mặc định, Roboflow/RF-DETR optional):
+#### Khởi chạy Server Module (Roboflow thật cho server, Harness chỉ local/test):
 ```bash
 export DEVICE_PROFILE=server
-export SERVER_INFERENCE_BACKEND=harness
+export SERVER_INFERENCE_BACKEND=roboflow
+export ROBOFLOW_API_KEY=CHANGE_ME
 python3 -m server_pc.app.main
 ```
-Dịch vụ sẽ khởi động và lắng nghe tại cổng `8002`. Để dùng Roboflow hosted Workflow, đặt `SERVER_INFERENCE_BACKEND=roboflow` và cấu hình `ROBOFLOW_API_KEY`. Để quay lại RF-DETR local, đặt `SERVER_INFERENCE_BACKEND=local`.
+Dịch vụ sẽ khởi động và lắng nghe tại cổng `8002`. Production nên dùng `SERVER_INFERENCE_BACKEND=roboflow` để chạy workflow/model thật. `SERVER_INFERENCE_BACKEND=harness` chỉ dùng fake provider cho local/offline tests. Để quay lại RF-DETR local, đặt `SERVER_INFERENCE_BACKEND=local`.
 
-Docker `server_pc` mặc định dùng image CPU/harness nhẹ và không cài RF-DETR/PyTorch CUDA. Deploy riêng server PC bằng:
+Docker `server_pc` production mặc định dùng Roboflow hosted workflow và không cài RF-DETR/PyTorch CUDA. Deploy riêng server PC bằng:
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build server_pc
@@ -102,7 +103,7 @@ INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose -f docker-co
 
 ## Roboflow Workflow Integration
 
-Workflow hosted đã được tích hợp trong `shared/services/roboflow_workflow_client.py`. `server_pc` hiện dùng `HarnessRuntime` mặc định để có flow provider-independent ổn định; Roboflow hosted Workflow là backend optional qua `SERVER_INFERENCE_BACKEND=roboflow`.
+Workflow hosted đã được tích hợp trong `shared/services/roboflow_workflow_client.py`. Production `server_pc` nên chạy backend `roboflow` để gọi workflow/model thật. Backend `harness` dùng fake provider và chỉ phù hợp cho local/offline validation.
 
 - Workspace slug: `les-workspace-ijdwd`
 - Workflow slug: `evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic`
