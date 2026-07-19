@@ -10,14 +10,14 @@ python-dotenv==1.1.0
 
 # Image processing
 opencv-python-headless==4.11.0.86
-numpy>=1.24.0,<2.0.0
-Pillow>=10.0.0
+numpy>=2.0.0,<2.4.0
+Pillow>=11.0.0,<12.0.0
 
 # Messaging
 pika==1.3.2
 
 # HTTP / hosted inference
-inference-sdk>=0.64.0
+inference-sdk==0.64.8
 requests>=2.31.0
 
 # Logging
