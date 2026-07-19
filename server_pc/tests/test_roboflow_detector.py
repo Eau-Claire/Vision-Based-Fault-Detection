@@ -44,6 +44,18 @@ class TestServerRoboflowWorkflowDetector(unittest.TestCase):
         self.assertEqual(run_workflow.call_args.kwargs["timeout_seconds"], 7)
 
     @patch("server_pc.app.roboflow_detector.run_evn_object_detection_workflow")
+    def test_detect_image_url_uses_workflow_url_input(self, run_workflow):
+        run_workflow.return_value = [FakeRun()]
+        detector = ServerRoboflowWorkflowDetector(api_key="test-key", timeout_seconds=7)
+
+        result = detector.detect_image_url("https://example.com/image.jpg")
+
+        self.assertEqual(len(result.detections), 1)
+        run_workflow.assert_called_once()
+        self.assertEqual(run_workflow.call_args.args[0], "https://example.com/image.jpg")
+        self.assertEqual(run_workflow.call_args.kwargs["api_key"], "test-key")
+
+    @patch("server_pc.app.roboflow_detector.run_evn_object_detection_workflow")
     def test_detect_image_bytes_uses_pil_without_opencv_decode(self, run_workflow):
         run_workflow.return_value = [FakeRun()]
         detector = ServerRoboflowWorkflowDetector(api_key="test-key", timeout_seconds=7)

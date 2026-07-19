@@ -117,6 +117,23 @@ class LegacyDetectorAnalysisRunner:
     def model_version(self) -> str:
         return self.detector.model_version
 
+    def analyze_url(
+        self,
+        file_url: str,
+        media_type: str = "Image",
+    ) -> ServerAnalysisOutput:
+        if _is_video(media_type, ""):
+            raise ValueError("URL inference path currently supports image media only")
+        if not hasattr(self.detector, "detect_image_url"):
+            raise ValueError("Configured detector does not support URL image inference")
+
+        detection_result = self.detector.detect_image_url(file_url)
+        return ServerAnalysisOutput(
+            detection_result=detection_result,
+            model_name=self.model_name,
+            model_version=self.model_version,
+        )
+
     def analyze_media(
         self,
         file_bytes: bytes,

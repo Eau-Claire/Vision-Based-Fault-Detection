@@ -8,6 +8,7 @@ from PIL import Image
 from shared.services.roboflow_workflow_client import (
     ROBOFLOW_OUTPUT_NAMES,
     RoboflowConfigurationError,
+    RoboflowWorkflowError,
     parse_workflow_response,
     _RestWorkflowClient,
     run_evn_object_detection_workflow,
@@ -92,6 +93,8 @@ class TestRoboflowWorkflowClient(unittest.TestCase):
     @patch("shared.services.roboflow_workflow_client.requests.post")
     def test_rest_client_posts_base64_workflow_payload(self, post):
         class FakeResponse:
+            status_code = 200
+
             def raise_for_status(self):
                 return None
 
@@ -124,6 +127,8 @@ class TestRoboflowWorkflowClient(unittest.TestCase):
     @patch("shared.services.roboflow_workflow_client.requests.post")
     def test_rest_client_posts_https_url_workflow_payload(self, post):
         class FakeResponse:
+            status_code = 200
+
             def raise_for_status(self):
                 return None
 
@@ -145,6 +150,29 @@ class TestRoboflowWorkflowClient(unittest.TestCase):
             payload["inputs"]["image"],
             {"type": "url", "value": "https://example.com/image.jpg"},
         )
+
+    @patch("shared.services.roboflow_workflow_client.requests.post")
+    def test_rest_client_error_includes_response_body(self, post):
+        class FakeResponse:
+            status_code = 500
+            text = "workflow model_id is invalid"
+
+            def json(self):
+                return {}
+
+        post.return_value = FakeResponse()
+        client = _RestWorkflowClient(api_key="test-key")
+
+        with self.assertRaises(RoboflowWorkflowError) as ctx:
+            client.run_workflow(
+                workspace_name="les-workspace-ijdwd",
+                workflow_id="workflow-id",
+                images={"image": "https://example.com/image.jpg"},
+                parameters={},
+            )
+
+        self.assertIn("status=500", str(ctx.exception))
+        self.assertIn("workflow model_id is invalid", str(ctx.exception))
 
 
 class TestRoboflowWorkflowSmoke(unittest.TestCase):

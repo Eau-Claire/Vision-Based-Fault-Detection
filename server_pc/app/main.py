@@ -126,7 +126,7 @@ def analyze(payload: AnalyzePayload, background_tasks: BackgroundTasks):
 
 def _run_analysis(payload: AnalyzePayload):
     from shared.services.callback_service import send_callback, CallbackError
-    from shared.services.media_downloader import download_media
+    from shared.services.media_downloader import download_media, resolve_media_url
     from shared.services.result_mapper import map_success_result, map_failure_result
 
     set_correlation_context(
@@ -135,18 +135,31 @@ def _run_analysis(payload: AnalyzePayload):
     )
     start = time.monotonic()
     try:
-        file_bytes, ext = download_media(
-            file_url=payload.fileUrl,
-            base_url=settings.callback_base_url,
-            timeout=settings.media_download_timeout,
-            max_size_bytes=settings.media_max_size_bytes,
-            allow_private_ips=settings.allow_private_ips,
-        )
-        output = analysis_runner.analyze_media(
-            file_bytes=file_bytes,
-            extension=ext,
-            media_type=payload.mediaType,
-        )
+        if _can_analyze_image_url(analysis_runner, payload.mediaType):
+            media_url = resolve_media_url(
+                file_url=payload.fileUrl,
+                base_url=settings.callback_base_url,
+                allow_private_ips=settings.allow_private_ips,
+            )
+            if not media_url.startswith("https://"):
+                raise ValueError("Roboflow URL inputs must use https")
+            output = analysis_runner.analyze_url(
+                file_url=media_url,
+                media_type=payload.mediaType,
+            )
+        else:
+            file_bytes, ext = download_media(
+                file_url=payload.fileUrl,
+                base_url=settings.callback_base_url,
+                timeout=settings.media_download_timeout,
+                max_size_bytes=settings.media_max_size_bytes,
+                allow_private_ips=settings.allow_private_ips,
+            )
+            output = analysis_runner.analyze_media(
+                file_bytes=file_bytes,
+                extension=ext,
+                media_type=payload.mediaType,
+            )
 
         ms = int((time.monotonic() - start) * 1000)
         result = map_success_result(
@@ -190,6 +203,10 @@ def _run_analysis(payload: AnalyzePayload):
         logger.error(f"Callback failed for {payload.requestId}")
     finally:
         clear_correlation_context()
+
+
+def _can_analyze_image_url(runner, media_type: str) -> bool:
+    return media_type.lower() == "image" and hasattr(runner, "analyze_url")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,11 @@ import time
 import threading
 from shared.schemas.analysis_request import AnalysisRequest, PreferredModel
 from shared.services.callback_service import send_callback, CallbackError
-from shared.services.media_downloader import download_media, DownloadError
+from shared.services.media_downloader import (
+    download_media,
+    resolve_media_url,
+    DownloadError,
+)
 from shared.services.result_mapper import map_success_result, map_failure_result
 from shared.messaging.rabbitmq_client import consume_with_reconnect
 from shared.utils.logging import (
@@ -68,29 +72,39 @@ def create_server_consumer(analysis_runner, settings):
                 )
                 return
 
-            # Download media
+            # Run inference through the configured analysis runner.
             try:
-                file_bytes, ext = download_media(
-                    file_url=request.file_url,
-                    base_url=settings.callback_base_url,
-                    timeout=settings.media_download_timeout,
-                    max_size_bytes=settings.media_max_size_bytes,
-                    allow_private_ips=settings.allow_private_ips,
-                )
+                if _can_analyze_image_url(analysis_runner, request.media_type.value):
+                    media_url = resolve_media_url(
+                        file_url=request.file_url,
+                        base_url=settings.callback_base_url,
+                        allow_private_ips=settings.allow_private_ips,
+                    )
+                    if not media_url.startswith("https://"):
+                        raise DownloadError("Roboflow URL inputs must use https")
+                    output = analysis_runner.analyze_url(
+                        file_url=media_url,
+                        media_type=request.media_type.value,
+                    )
+                else:
+                    file_bytes, ext = download_media(
+                        file_url=request.file_url,
+                        base_url=settings.callback_base_url,
+                        timeout=settings.media_download_timeout,
+                        max_size_bytes=settings.media_max_size_bytes,
+                        allow_private_ips=settings.allow_private_ips,
+                    )
+                    output = analysis_runner.analyze_media(
+                        file_bytes=file_bytes,
+                        extension=ext,
+                        media_type=request.media_type.value,
+                    )
             except DownloadError as e:
                 _send_failure_callback(
                     request, settings, "MEDIA_DOWNLOAD_FAILED", str(e)
                 )
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 return
-
-            # Run inference through the configured analysis runner.
-            try:
-                output = analysis_runner.analyze_media(
-                    file_bytes=file_bytes,
-                    extension=ext,
-                    media_type=request.media_type.value,
-                )
             except Exception as e:
                 logger.error(
                     f"Model inference failed for job {request.request_id}: {e}",
@@ -182,6 +196,10 @@ def create_server_consumer(analysis_runner, settings):
             clear_correlation_context()
 
     return on_message
+
+
+def _can_analyze_image_url(analysis_runner, media_type: str) -> bool:
+    return media_type.lower() == "image" and hasattr(analysis_runner, "analyze_url")
 
 
 def _send_failure_callback(request, settings, error_code, error_message):

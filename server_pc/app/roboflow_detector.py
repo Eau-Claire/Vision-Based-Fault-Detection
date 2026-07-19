@@ -90,6 +90,26 @@ class ServerRoboflowWorkflowDetector:
         return result
 
 
+    def detect_image_url(self, image_url: str) -> DetectionResult:
+        """Run hosted Roboflow Workflow inference directly from an HTTPS URL."""
+        runs = run_evn_object_detection_workflow(
+            image_url,
+            api_key=self._api_key,
+            timeout_seconds=self._timeout_seconds,
+            max_retries=self._max_retries,
+            retry_base_delay=self._retry_base_delay,
+        )
+        if not runs:
+            return DetectionResult(detections=[], image_width=0, image_height=0, frame_count=1)
+
+        result = runs[0].as_detection_result()
+        logger.info(
+            f"Roboflow image inference: {len(result.detections)} detections "
+            f"({result.image_width}x{result.image_height})",
+            extra={"event": "inference_image_complete"},
+        )
+        return result
+
     def detect_image_bytes(self, image_bytes: bytes) -> DetectionResult:
         """Run hosted Roboflow Workflow inference on encoded image bytes.
 

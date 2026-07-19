@@ -53,19 +53,11 @@ def download_media(
         DownloadError: If download fails.
         FileTooLargeError: If file exceeds max_size_bytes.
     """
-    # Resolve relative URL
-    if not file_url.startswith("http"):
-        if not base_url:
-            raise DownloadError(
-                f"Cannot download relative URL without base_url: {file_url}"
-            )
-        full_url = f"{base_url.rstrip('/')}/{file_url.lstrip('/')}"
-    else:
-        full_url = file_url
-
-    # SSRF & safety validation
-    if not is_safe_url(full_url, allow_private_ips=allow_private_ips):
-        raise DownloadError(f"URL is unsafe or forbidden: {full_url}")
+    full_url = resolve_media_url(
+        file_url=file_url,
+        base_url=base_url,
+        allow_private_ips=allow_private_ips,
+    )
 
     logger.info(
         f"Downloading media from: {full_url}",
@@ -122,6 +114,27 @@ def download_media(
         )
     except requests.exceptions.RequestException as e:
         raise DownloadError(f"Failed to download media: {e}")
+
+
+def resolve_media_url(
+    file_url: str,
+    base_url: str = "",
+    allow_private_ips: bool = True,
+) -> str:
+    """Resolve and validate a media URL without downloading it."""
+    if not file_url.startswith("http"):
+        if not base_url:
+            raise DownloadError(
+                f"Cannot resolve relative URL without base_url: {file_url}"
+            )
+        full_url = f"{base_url.rstrip('/')}/{file_url.lstrip('/')}"
+    else:
+        full_url = file_url
+
+    if not is_safe_url(full_url, allow_private_ips=allow_private_ips):
+        raise DownloadError(f"URL is unsafe or forbidden: {full_url}")
+
+    return full_url
 
 
 def save_to_temp_file(

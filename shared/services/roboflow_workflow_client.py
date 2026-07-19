@@ -204,7 +204,12 @@ class _RestWorkflowClient:
 
         url = f"{self.api_url}/{workspace_name}/workflows/{workflow_id}"
         response = requests.post(url, json=payload)
-        response.raise_for_status()
+        if response.status_code >= 400:
+            body = response.text[:500]
+            raise RoboflowWorkflowError(
+                f"Roboflow REST workflow failed: status={response.status_code}, "
+                f"body={body}"
+            )
         return response.json()
 
 
