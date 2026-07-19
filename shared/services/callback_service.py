@@ -70,6 +70,20 @@ def send_callback(
 
     payload = result.model_dump(by_alias=True, exclude_none=True)
     payload_json = json.dumps(payload, ensure_ascii=False)
+    detection_count = len(result.detections or [])
+    category_codes = sorted({det.category_code for det in result.detections or []})
+    logger.info(
+        "Prepared callback payload: "
+        f"status={result.status.value}, detections={detection_count}",
+        extra={
+            "event": "callback_payload_prepared",
+            "analysis_status": result.status.value,
+            "detection_count": detection_count,
+            "category_codes": category_codes,
+            "model_name": result.model_name,
+            "error_code": result.error_code,
+        },
+    )
 
     last_error: Optional[Exception] = None
 

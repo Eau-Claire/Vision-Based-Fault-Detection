@@ -92,6 +92,14 @@ def create_server_consumer(analysis_runner, settings):
                     media_type=request.media_type.value,
                 )
             except Exception as e:
+                logger.error(
+                    f"Model inference failed for job {request.request_id}: {e}",
+                    exc_info=True,
+                    extra={
+                        "event": "job_inference_failed",
+                        "error_code": "MODEL_INFERENCE_FAILED",
+                    },
+                )
                 _send_failure_callback(
                     request, settings, "MODEL_INFERENCE_FAILED", str(e)
                 )
