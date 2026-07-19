@@ -16,6 +16,22 @@ class ServerSettings(BaseAppSettings):
     device_profile: str = Field("server", alias="DEVICE_PROFILE")
     runtime_name: str = Field("server_pc", alias="RUNTIME_NAME")
 
+    # ── Inference Backend ──
+    inference_backend: str = Field(
+        "harness",
+        alias="SERVER_INFERENCE_BACKEND",
+        description=(
+            "harness for provider-independent runtime, roboflow for "
+            "hosted Workflow, local for RF-DETR"
+        ),
+    )
+    harness_checkpoint_dir: str = Field(
+        "/tmp/vision-harness-checkpoints", alias="HARNESS_CHECKPOINT_DIR"
+    )
+    harness_workflow_ref: str = Field(
+        "fake://evn-object-detection", alias="HARNESS_WORKFLOW_REF"
+    )
+
     # ── RF-DETR Model ──
     rfdetr_model_path: str = Field(
         "models/rf_detr/rf_detr_base.pth", alias="RFDETR_MODEL_PATH"

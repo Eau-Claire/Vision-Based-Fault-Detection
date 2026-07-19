@@ -69,6 +69,12 @@ class BaseAppSettings(BaseSettings):
     confidence_threshold: float = Field(
         0.25, alias="CONFIDENCE_THRESHOLD"
     )
+    roboflow_api_key: str = Field("", alias="ROBOFLOW_API_KEY")
+    roboflow_timeout: int = Field(30, alias="ROBOFLOW_TIMEOUT")
+    roboflow_max_retries: int = Field(2, alias="ROBOFLOW_MAX_RETRIES")
+    roboflow_retry_base_delay: float = Field(
+        1.0, alias="ROBOFLOW_RETRY_BASE_DELAY"
+    )
 
     # ── Server ──
     server_host: str = Field("0.0.0.0", alias="SERVER_HOST")

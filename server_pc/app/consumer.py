@@ -1,7 +1,7 @@
 """
 RabbitMQ consumer for server_pc runtime.
 
-Consumes analysis jobs from the server queue, runs RF-DETR inference,
+Consumes analysis jobs from the server queue, runs the configured server analysis runner,
 and sends results back via callback. Acknowledges messages only
 after successful callback delivery.
 """
@@ -9,9 +9,6 @@ after successful callback delivery.
 import json
 import time
 import threading
-import cv2
-import numpy as np
-
 from shared.schemas.analysis_request import AnalysisRequest, PreferredModel
 from shared.services.callback_service import send_callback, CallbackError
 from shared.services.media_downloader import download_media, DownloadError
@@ -26,11 +23,11 @@ from shared.utils.logging import (
 logger = get_logger("server_consumer")
 
 
-def create_server_consumer(detector, settings):
+def create_server_consumer(analysis_runner, settings):
     """Create a RabbitMQ message handler for the server runtime.
 
     Args:
-        detector: Initialized ServerRfDetrDetector instance.
+        analysis_runner: Initialized server analysis runner.
         settings: ServerSettings instance.
 
     Returns:
@@ -87,24 +84,13 @@ def create_server_consumer(detector, settings):
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 return
 
-            # Run inference
-            is_video = request.media_type.value.lower() == "video" or ext in (
-                ".mp4", ".avi", ".mov", ".webm", ".mkv"
-            )
-
+            # Run inference through the configured analysis runner.
             try:
-                if is_video:
-                    from server_pc.app.video_processor import process_video
-                    detection_result = process_video(
-                        detector, file_bytes, ext
-                    )
-                else:
-                    # Decode image
-                    nparr = np.frombuffer(file_bytes, np.uint8)
-                    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    if image is None:
-                        raise ValueError("Failed to decode image bytes")
-                    detection_result = detector.detect_image(image)
+                output = analysis_runner.analyze_media(
+                    file_bytes=file_bytes,
+                    extension=ext,
+                    media_type=request.media_type.value,
+                )
             except Exception as e:
                 _send_failure_callback(
                     request, settings, "MODEL_INFERENCE_FAILED", str(e)
@@ -120,12 +106,17 @@ def create_server_consumer(detector, settings):
             result = map_success_result(
                 request_id=request.request_id,
                 media_id=request.media_id,
-                detection_result=detection_result,
-                model_name=detector.model_name,
-                model_version=detector.model_version,
+                detection_result=output.detection_result,
+                model_name=output.model_name,
+                model_version=output.model_version,
                 processing_time_ms=processing_time_ms,
                 device_profile="server",
             )
+
+            if output.harness_run_id:
+                result.raw_result["harnessRunId"] = output.harness_run_id
+            if output.harness_checkpoint_path:
+                result.raw_result["harnessCheckpointPath"] = output.harness_checkpoint_path
 
             callback_url = (
                 request.callback_url or settings.callback_url
@@ -214,14 +205,14 @@ def _send_failure_callback(request, settings, error_code, error_message):
         )
 
 
-def start_server_consumer(detector, settings):
+def start_server_consumer(analysis_runner, settings):
     """Start the server RabbitMQ consumer in a background thread.
 
     Args:
-        detector: Initialized ServerRfDetrDetector instance.
+        analysis_runner: Initialized server analysis runner.
         settings: ServerSettings instance.
     """
-    callback = create_server_consumer(detector, settings)
+    callback = create_server_consumer(analysis_runner, settings)
 
     def run():
         consume_with_reconnect(
