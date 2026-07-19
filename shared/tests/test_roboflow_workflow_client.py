@@ -1,10 +1,15 @@
 import os
 import unittest
+from io import BytesIO
+from unittest.mock import patch
+
+from PIL import Image
 
 from shared.services.roboflow_workflow_client import (
     ROBOFLOW_OUTPUT_NAMES,
     RoboflowConfigurationError,
     parse_workflow_response,
+    _RestWorkflowClient,
     run_evn_object_detection_workflow,
 )
 
@@ -83,6 +88,63 @@ class TestRoboflowWorkflowClient(unittest.TestCase):
         )
         self.assertEqual(client.calls[0]["images"]["image"], "https://example.com/image.jpg")
         self.assertEqual(client.calls[0]["parameters"], {})
+
+    @patch("shared.services.roboflow_workflow_client.requests.post")
+    def test_rest_client_posts_base64_workflow_payload(self, post):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return [{"predictions": []}]
+
+        post.return_value = FakeResponse()
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), color="white").save(buffer, format="JPEG")
+        client = _RestWorkflowClient(api_key="test-key")
+
+        result = client.run_workflow(
+            workspace_name="les-workspace-ijdwd",
+            workflow_id="workflow-id",
+            images={"image": Image.open(BytesIO(buffer.getvalue()))},
+            parameters={},
+        )
+
+        self.assertEqual(result, [{"predictions": []}])
+        url = post.call_args.args[0]
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(
+            url,
+            "https://serverless.roboflow.com/les-workspace-ijdwd/workflows/workflow-id",
+        )
+        self.assertEqual(payload["api_key"], "test-key")
+        self.assertEqual(payload["inputs"]["image"]["type"], "base64")
+        self.assertGreater(len(payload["inputs"]["image"]["value"]), 100)
+
+    @patch("shared.services.roboflow_workflow_client.requests.post")
+    def test_rest_client_posts_https_url_workflow_payload(self, post):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return [{"predictions": []}]
+
+        post.return_value = FakeResponse()
+        client = _RestWorkflowClient(api_key="test-key")
+
+        client.run_workflow(
+            workspace_name="les-workspace-ijdwd",
+            workflow_id="workflow-id",
+            images={"image": "https://example.com/image.jpg"},
+            parameters={},
+        )
+
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(
+            payload["inputs"]["image"],
+            {"type": "url", "value": "https://example.com/image.jpg"},
+        )
 
 
 class TestRoboflowWorkflowSmoke(unittest.TestCase):

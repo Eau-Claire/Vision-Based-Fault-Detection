@@ -11,10 +11,13 @@ import base64
 import binascii
 import os
 import time
+from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
+
+import requests
 
 from shared.schemas.analysis_result import BoundingBox, Detection, DetectionResult
 from shared.services.class_mapping import map_class_to_category
@@ -153,11 +156,90 @@ def _make_client(api_key: str) -> Any:
     try:
         from inference_sdk import InferenceHTTPClient
     except ImportError as exc:
-        raise RoboflowConfigurationError(
-            "inference-sdk is required. Install it with the runtime requirements."
-        ) from exc
+        logger.warning(
+            "Roboflow inference-sdk import failed; falling back to REST workflow client",
+            extra={
+                "event": "roboflow_sdk_unavailable",
+                "error_type": type(exc).__name__,
+            },
+        )
+        return _RestWorkflowClient(api_key=api_key)
 
     return InferenceHTTPClient(api_url=ROBOFLOW_API_URL, api_key=api_key)
+
+
+class _RestWorkflowClient:
+    """Minimal REST client for Roboflow Workflows.
+
+    This keeps production image inference independent from inference-sdk's
+    OpenCV import path, which requires libGL in slim Docker images.
+    """
+
+    def __init__(self, api_key: str, api_url: str = ROBOFLOW_API_URL):
+        self.api_key = api_key
+        self.api_url = api_url.rstrip("/")
+
+    def run_workflow(
+        self,
+        *,
+        workspace_name: str,
+        workflow_id: str,
+        images: Mapping[str, Any],
+        parameters: Mapping[str, Any],
+        use_cache: bool = False,
+    ) -> Any:
+        del use_cache
+        image = images.get(ROBOFLOW_IMAGE_INPUT_NAME)
+        if image is None:
+            raise RoboflowConfigurationError(
+                f"Missing workflow image input: {ROBOFLOW_IMAGE_INPUT_NAME}"
+            )
+
+        payload: Dict[str, Any] = {
+            "api_key": self.api_key,
+            "inputs": {ROBOFLOW_IMAGE_INPUT_NAME: _rest_image_input(image)},
+        }
+        if parameters:
+            payload["parameters"] = dict(parameters)
+
+        url = f"{self.api_url}/{workspace_name}/workflows/{workflow_id}"
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+
+def _rest_image_input(image: Any) -> Dict[str, str]:
+    if isinstance(image, str):
+        if image.startswith("https://"):
+            return {"type": "url", "value": image}
+        if image.startswith("http://"):
+            raise RoboflowConfigurationError("Roboflow URL inputs must use https")
+        path = Path(image)
+        if path.exists():
+            return {"type": "base64", "value": _bytes_to_base64(path.read_bytes())}
+        return {"type": "base64", "value": image}
+
+    if isinstance(image, Path):
+        return {"type": "base64", "value": _bytes_to_base64(image.read_bytes())}
+
+    if isinstance(image, bytes):
+        return {"type": "base64", "value": _bytes_to_base64(image)}
+
+    if hasattr(image, "save"):
+        buffer = BytesIO()
+        image_to_save = image
+        if getattr(image_to_save, "mode", "RGB") not in ("RGB", "L"):
+            image_to_save = image_to_save.convert("RGB")
+        image_to_save.save(buffer, format="JPEG")
+        return {"type": "base64", "value": _bytes_to_base64(buffer.getvalue())}
+
+    raise RoboflowConfigurationError(
+        f"Unsupported REST workflow image input type: {type(image).__name__}"
+    )
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
 
 
 def _build_parameters(parameters: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
