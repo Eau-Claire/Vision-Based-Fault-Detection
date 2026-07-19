@@ -10,8 +10,10 @@ This guide outlines how to deploy the Vision-Based AI Service (`server_pc`) on p
 Run the following command in the root folder of the project on your server to pull, build, and start the AI service. The FastAPI application will run on port `8002` (bound to `127.0.0.1` for security so only Nginx can access it):
 ```bash
 git pull origin main
-docker-compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build server_pc
 ```
+
+The production Dockerfile defaults to the lightweight CPU/harness backend and does not install RF-DETR/PyTorch. Use `INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local` only when intentionally deploying the optional local RF-DETR backend.
 
 ### 2. Configure Host Nginx
 Create a new configuration file for the AI service in your host's Nginx configuration directory:

@@ -47,6 +47,8 @@ services:
     build:
       context: .
       dockerfile: server_pc/Dockerfile
+      args:
+        INSTALL_LOCAL_ML: ${INSTALL_LOCAL_ML:-false}
     container_name: ai_server_pc
     depends_on:
       rabbitmq:
@@ -55,6 +57,8 @@ services:
       - "8002:8002"
     environment:
       - DEVICE_PROFILE=server
+      - SERVER_INFERENCE_BACKEND=${SERVER_INFERENCE_BACKEND:-harness}
+      - HARNESS_CHECKPOINT_DIR=${HARNESS_CHECKPOINT_DIR:-/tmp/vision-harness-checkpoints}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER:?RABBITMQ_USER is required}

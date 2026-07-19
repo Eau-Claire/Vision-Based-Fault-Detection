@@ -86,6 +86,18 @@ python3 -m server_pc.app.main
 ```
 Dịch vụ sẽ khởi động và lắng nghe tại cổng `8002`. Để dùng Roboflow hosted Workflow, đặt `SERVER_INFERENCE_BACKEND=roboflow` và cấu hình `ROBOFLOW_API_KEY`. Để quay lại RF-DETR local, đặt `SERVER_INFERENCE_BACKEND=local`.
 
+Docker `server_pc` mặc định dùng image CPU/harness nhẹ và không cài RF-DETR/PyTorch CUDA. Deploy riêng server PC bằng:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build server_pc
+```
+
+Chỉ khi cần backend RF-DETR local mới build thêm dependency ML CPU-only:
+
+```bash
+INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose -f docker-compose.prod.yml up -d --build server_pc
+```
+
 ---
 
 ## Roboflow Workflow Integration

@@ -1,8 +1,8 @@
 # =============================================================================
-# Server PC — RF-DETR Dockerfile
-# Supports NVIDIA CUDA GPU acceleration when available
+# Server PC Dockerfile
+# Default image is CPU/harness friendly. Local RF-DETR dependencies are optional.
 # =============================================================================
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS gpu-base
+FROM python:3.10-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,38 +10,29 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install Python 3 and system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        python3 \
-        python3-venv \
-        python3-pip \
-        libgl1-mesa-glx \
-        libglib2.0-0 \
-        libsm6 \
-        libxext6 \
-        libxrender-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3 /usr/bin/python
-
-# Copy requirements and install dependencies
 COPY server_pc/requirements.txt /app/server_pc/requirements.txt
 RUN pip install --no-cache-dir -r server_pc/requirements.txt
 
-# Copy shared module
-COPY shared/ /app/shared/
+ARG INSTALL_LOCAL_ML=false
+COPY server_pc/requirements-local.txt /app/server_pc/requirements-local.txt
+RUN if [ "$INSTALL_LOCAL_ML" = "true" ]; then \
+        pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.3.1+cpu torchvision==0.18.1+cpu && \
+        pip install --no-cache-dir -r server_pc/requirements-local.txt; \
+    fi
 
-# Copy server module
+COPY shared/ /app/shared/
+COPY edge/ /app/edge/
 COPY server_pc/ /app/server_pc/
 
-# Create models directory
-RUN mkdir -p /app/models/rf_detr
+RUN mkdir -p /app/models/rf_detr /tmp/vision-harness-checkpoints
 
-# Default environment variables
 ENV DEVICE_PROFILE=server \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8002 \
-    RFDETR_DEVICE=auto \
+    SERVER_INFERENCE_BACKEND=harness \
+    HARNESS_CHECKPOINT_DIR=/tmp/vision-harness-checkpoints \
+    RFDETR_DEVICE=cpu \
     LOG_FORMAT=json
 
 EXPOSE 8002

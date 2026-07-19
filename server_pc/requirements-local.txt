@@ -1,0 +1,7 @@
+# Optional local RF-DETR backend dependencies.
+# Docker installs CPU-only torch/torchvision separately before this file when
+# INSTALL_LOCAL_ML=true, avoiding the large CUDA wheels from PyPI.
+
+rfdetr>=1.0.0
+transformers>=4.40.0
+supervision>=0.20.0

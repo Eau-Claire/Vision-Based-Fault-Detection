@@ -1,0 +1,34 @@
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# Large local artifacts; models are mounted as volumes when needed.
+dataset/
+alerts/
+runs/
+models/
+*.pth
+*.pt
+*.onnx
+*.onnx.data
+
+# Local/editor noise
+.vscode/
+.idea/
+*.log
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
