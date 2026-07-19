@@ -63,6 +63,37 @@ class TestRoboflowWorkflowClient(unittest.TestCase):
         self.assertEqual(parsed[0].detections[0].category_code, "VE")
         self.assertAlmostEqual(parsed[0].detections[0].bounding_box.x, 0.2)
 
+    def test_parse_local_inference_single_output_dict(self):
+        raw = {
+            "predictions": {
+                "image": {"width": 1000, "height": 500},
+                "predictions": [
+                    {
+                        "class": "vegetation",
+                        "confidence": 0.91,
+                        "x": 250,
+                        "y": 100,
+                        "width": 100,
+                        "height": 50,
+                    }
+                ],
+            }
+        }
+
+        parsed = parse_workflow_response(raw)
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(len(parsed[0].detections), 1)
+        self.assertEqual(parsed[0].detections[0].category_code, "VE")
+
+    def test_parse_local_inference_outputs_list_dict(self):
+        raw = {"outputs": [{"predictions": []}]}
+
+        parsed = parse_workflow_response(raw)
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(set(parsed[0].outputs.keys()), set(ROBOFLOW_OUTPUT_NAMES))
+
     def test_rejects_parameters_not_declared_by_workflow(self):
         with self.assertRaises(RoboflowConfigurationError):
             run_evn_object_detection_workflow(

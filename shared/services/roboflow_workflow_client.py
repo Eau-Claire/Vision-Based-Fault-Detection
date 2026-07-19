@@ -136,14 +136,11 @@ def parse_workflow_response(
     *,
     output_dir: Optional[str] = None,
 ) -> List[RoboflowWorkflowRun]:
-    """Parse the list response returned by Roboflow Workflows."""
-    if not isinstance(raw_result, list):
-        raise RoboflowWorkflowResponseError(
-            f"Expected workflow response list, got {type(raw_result).__name__}"
-        )
+    """Parse workflow responses from serverless or local inference runtimes."""
+    entries = _workflow_response_entries(raw_result)
 
     parsed: List[RoboflowWorkflowRun] = []
-    for index, entry in enumerate(raw_result):
+    for index, entry in enumerate(entries):
         if not isinstance(entry, Mapping):
             raise RoboflowWorkflowResponseError(
                 f"Expected response entry {index} to be an object"
@@ -165,6 +162,23 @@ def parse_workflow_response(
         )
 
     return parsed
+
+
+def _workflow_response_entries(raw_result: Any) -> List[Any]:
+    if isinstance(raw_result, list):
+        return raw_result
+
+    if isinstance(raw_result, Mapping):
+        outputs = raw_result.get("outputs")
+        if isinstance(outputs, list):
+            return outputs
+        if any(name in raw_result for name in ROBOFLOW_OUTPUT_NAMES):
+            return [raw_result]
+
+    raise RoboflowWorkflowResponseError(
+        f"Expected workflow response list or output object, "
+        f"got {type(raw_result).__name__}"
+    )
 
 
 def _make_client(api_key: str, api_url: str = ROBOFLOW_API_URL) -> Any:
