@@ -5,10 +5,10 @@ Implements the shared Detector protocol for the server_pc runtime while using
 Roboflow Serverless instead of local RF-DETR weights.
 """
 
-from typing import List
+from io import BytesIO
+from typing import Any, List
 
-import cv2
-import numpy as np
+from PIL import Image
 
 from shared.schemas.analysis_result import Detection, DetectionResult
 from shared.services.roboflow_workflow_client import run_evn_object_detection_workflow
@@ -58,8 +58,8 @@ class ServerRoboflowWorkflowDetector:
     def model_version(self) -> str:
         return self._model_version
 
-    def detect_image(self, image: np.ndarray) -> DetectionResult:
-        """Run hosted Roboflow Workflow inference on a single image."""
+    def detect_image(self, image: Any) -> DetectionResult:
+        """Run hosted Roboflow Workflow inference on a single image array."""
         h, w = image.shape[:2]
         runs = run_evn_object_detection_workflow(
             image,
@@ -89,8 +89,49 @@ class ServerRoboflowWorkflowDetector:
         )
         return result
 
+
+    def detect_image_bytes(self, image_bytes: bytes) -> DetectionResult:
+        """Run hosted Roboflow Workflow inference on encoded image bytes.
+
+        This path avoids importing OpenCV in production Roboflow deployments,
+        which keeps the lightweight Docker image independent from libGL.
+        """
+        with Image.open(BytesIO(image_bytes)) as image:
+            image.load()
+            w, h = image.size
+            runs = run_evn_object_detection_workflow(
+                image,
+                api_key=self._api_key,
+                timeout_seconds=self._timeout_seconds,
+                max_retries=self._max_retries,
+                retry_base_delay=self._retry_base_delay,
+            )
+
+        if not runs:
+            return DetectionResult(
+                detections=[], image_width=w, image_height=h, frame_count=1
+            )
+
+        result = runs[0].as_detection_result()
+        if result.image_width <= 0 or result.image_height <= 0:
+            result = DetectionResult(
+                detections=result.detections,
+                image_width=w,
+                image_height=h,
+                frame_count=1,
+            )
+
+        logger.info(
+            f"Roboflow image inference: {len(result.detections)} "
+            f"detections ({w}x{h})",
+            extra={"event": "inference_image_complete"},
+        )
+        return result
+
     def detect_video(self, video_path: str) -> DetectionResult:
         """Run hosted Roboflow Workflow inference on sampled video frames."""
+        import cv2
+
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Failed to open video: {video_path}")

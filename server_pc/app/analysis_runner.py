@@ -127,6 +127,8 @@ class LegacyDetectorAnalysisRunner:
             from server_pc.app.video_processor import process_video
 
             detection_result = process_video(self.detector, file_bytes, extension)
+        elif hasattr(self.detector, "detect_image_bytes"):
+            detection_result = self.detector.detect_image_bytes(file_bytes)
         else:
             import cv2
             import numpy as np
