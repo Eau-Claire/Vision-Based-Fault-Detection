@@ -29,7 +29,7 @@ logger = get_logger("roboflow_workflow")
 ROBOFLOW_API_URL = "https://serverless.roboflow.com"
 ROBOFLOW_WORKSPACE_NAME = "les-workspace-ijdwd"
 ROBOFLOW_WORKFLOW_ID = (
-    "evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic"
+    "evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic"
 )
 ROBOFLOW_IMAGE_INPUT_NAME = "image"
 ROBOFLOW_DECLARED_PARAMETERS: Dict[str, Any] = {}
@@ -76,6 +76,9 @@ def run_evn_object_detection_workflow(
     api_key: Optional[str] = None,
     parameters: Optional[Mapping[str, Any]] = None,
     output_dir: Optional[str] = None,
+    api_url: Optional[str] = None,
+    workspace_name: Optional[str] = None,
+    workflow_id: Optional[str] = None,
     timeout_seconds: int = 30,
     max_retries: int = 2,
     retry_base_delay: float = 1.0,
@@ -90,6 +93,9 @@ def run_evn_object_detection_workflow(
         parameters: Runtime parameters. The current wrapper workflow declares
             none, so unknown keys are rejected.
         output_dir: Optional directory for decoded image-shaped outputs.
+        api_url: Roboflow API URL. Defaults to ROBOFLOW_API_URL.
+        workspace_name: Roboflow workspace slug. Defaults to ROBOFLOW_WORKSPACE_NAME.
+        workflow_id: Roboflow Workflow slug. Defaults to ROBOFLOW_WORKFLOW_ID.
         timeout_seconds: Per-attempt timeout.
         max_retries: Number of retries after the first failed attempt.
         retry_base_delay: Exponential backoff base delay in seconds.
@@ -103,12 +109,21 @@ def run_evn_object_detection_workflow(
         raise RoboflowConfigurationError("ROBOFLOW_API_KEY must be configured")
 
     request_parameters = _build_parameters(parameters)
-    sdk_client = client or _make_client(resolved_api_key)
+    resolved_api_url = api_url or os.getenv("ROBOFLOW_API_URL", ROBOFLOW_API_URL)
+    resolved_workspace_name = workspace_name or os.getenv(
+        "ROBOFLOW_WORKSPACE_NAME", ROBOFLOW_WORKSPACE_NAME
+    )
+    resolved_workflow_id = workflow_id or os.getenv(
+        "ROBOFLOW_WORKFLOW_ID", ROBOFLOW_WORKFLOW_ID
+    )
+    sdk_client = client or _make_client(resolved_api_key, api_url=resolved_api_url)
 
     raw_result = _run_with_retries(
         sdk_client=sdk_client,
         image=image,
         parameters=request_parameters,
+        workspace_name=resolved_workspace_name,
+        workflow_id=resolved_workflow_id,
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
         retry_base_delay=retry_base_delay,
@@ -152,7 +167,7 @@ def parse_workflow_response(
     return parsed
 
 
-def _make_client(api_key: str) -> Any:
+def _make_client(api_key: str, api_url: str = ROBOFLOW_API_URL) -> Any:
     try:
         from inference_sdk import InferenceHTTPClient
     except ImportError as exc:
@@ -163,9 +178,9 @@ def _make_client(api_key: str) -> Any:
                 "error_type": type(exc).__name__,
             },
         )
-        return _RestWorkflowClient(api_key=api_key)
+        return _RestWorkflowClient(api_key=api_key, api_url=api_url)
 
-    return InferenceHTTPClient(api_url=ROBOFLOW_API_URL, api_key=api_key)
+    return InferenceHTTPClient(api_url=api_url, api_key=api_key)
 
 
 class _RestWorkflowClient:
@@ -267,6 +282,8 @@ def _run_with_retries(
     sdk_client: Any,
     image: Any,
     parameters: Mapping[str, Any],
+    workspace_name: str,
+    workflow_id: str,
     timeout_seconds: int,
     max_retries: int,
     retry_base_delay: float,
@@ -280,6 +297,8 @@ def _run_with_retries(
                 sdk_client=sdk_client,
                 image=image,
                 parameters=parameters,
+                workspace_name=workspace_name,
+                workflow_id=workflow_id,
                 timeout_seconds=timeout_seconds,
             )
         except FutureTimeout as exc:
@@ -310,13 +329,15 @@ def _run_once_with_timeout(
     sdk_client: Any,
     image: Any,
     parameters: Mapping[str, Any],
+    workspace_name: str,
+    workflow_id: str,
     timeout_seconds: int,
 ) -> Any:
     executor = ThreadPoolExecutor(max_workers=1)
     future = executor.submit(
         sdk_client.run_workflow,
-        workspace_name=ROBOFLOW_WORKSPACE_NAME,
-        workflow_id=ROBOFLOW_WORKFLOW_ID,
+        workspace_name=workspace_name,
+        workflow_id=workflow_id,
         images={ROBOFLOW_IMAGE_INPUT_NAME: image},
         parameters=dict(parameters),
         use_cache=False,

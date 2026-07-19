@@ -31,6 +31,11 @@ class ServerRoboflowWorkflowDetector:
         max_frames_per_video: int = 500,
         dedup_iou_threshold: float = 0.4,
         max_detections_per_class: int = 10,
+        api_url: str = "https://serverless.roboflow.com",
+        workspace_name: str = "les-workspace-ijdwd",
+        workflow_id: str = (
+            "evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic"
+        ),
     ):
         if not api_key:
             raise ValueError(
@@ -46,9 +51,10 @@ class ServerRoboflowWorkflowDetector:
         self._dedup_iou_threshold = dedup_iou_threshold
         self._max_detections_per_class = max_detections_per_class
         self._model_name = "Roboflow Workflow"
-        self._model_version = (
-            "evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic"
-        )
+        self._api_url = api_url
+        self._workspace_name = workspace_name
+        self._workflow_id = workflow_id
+        self._model_version = workflow_id
 
     @property
     def model_name(self) -> str:
@@ -64,6 +70,9 @@ class ServerRoboflowWorkflowDetector:
         runs = run_evn_object_detection_workflow(
             image,
             api_key=self._api_key,
+            api_url=self._api_url,
+            workspace_name=self._workspace_name,
+            workflow_id=self._workflow_id,
             timeout_seconds=self._timeout_seconds,
             max_retries=self._max_retries,
             retry_base_delay=self._retry_base_delay,
@@ -95,12 +104,17 @@ class ServerRoboflowWorkflowDetector:
         runs = run_evn_object_detection_workflow(
             image_url,
             api_key=self._api_key,
+            api_url=self._api_url,
+            workspace_name=self._workspace_name,
+            workflow_id=self._workflow_id,
             timeout_seconds=self._timeout_seconds,
             max_retries=self._max_retries,
             retry_base_delay=self._retry_base_delay,
         )
         if not runs:
-            return DetectionResult(detections=[], image_width=0, image_height=0, frame_count=1)
+            return DetectionResult(
+                detections=[], image_width=0, image_height=0, frame_count=1
+            )
 
         result = runs[0].as_detection_result()
         logger.info(

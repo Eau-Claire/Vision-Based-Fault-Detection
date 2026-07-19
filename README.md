@@ -106,8 +106,8 @@ INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose -f docker-co
 Workflow hosted đã được tích hợp trong `shared/services/roboflow_workflow_client.py`. Production `server_pc` nên chạy backend `roboflow` để gọi workflow/model thật. Backend `harness` dùng fake provider và chỉ phù hợp cho local/offline validation.
 
 - Workspace slug: `les-workspace-ijdwd`
-- Workflow slug: `evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic`
-- API URL: `https://serverless.roboflow.com`
+- Workflow slug: `evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic`
+- API URL: configurable with `ROBOFLOW_API_URL`; for host-local Roboflow Inference from Docker use `http://host.docker.internal:9001`
 - Declared input: `image`
 - Declared runtime parameters: none
 - Declared output key: `predictions`

@@ -85,7 +85,7 @@ class TestRoboflowWorkflowClient(unittest.TestCase):
         self.assertEqual(client.calls[0]["workspace_name"], "les-workspace-ijdwd")
         self.assertEqual(
             client.calls[0]["workflow_id"],
-            "evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic",
+            "evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic",
         )
         self.assertEqual(client.calls[0]["images"]["image"], "https://example.com/image.jpg")
         self.assertEqual(client.calls[0]["parameters"], {})
