@@ -11,7 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY server_pc/requirements.txt /app/server_pc/requirements.txt
-RUN pip install --no-cache-dir -r server_pc/requirements.txt
+RUN pip install --no-cache-dir -r server_pc/requirements.txt && \
+    (pip uninstall -y opencv-python opencv-contrib-python || true) && \
+    pip install --no-cache-dir --force-reinstall opencv-python-headless==4.11.0.86
 
 ARG INSTALL_LOCAL_ML=false
 COPY server_pc/requirements-local.txt /app/server_pc/requirements-local.txt
