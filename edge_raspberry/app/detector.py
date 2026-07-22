@@ -169,6 +169,8 @@ class EdgeYoloDetector:
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        duration = round(total_frames / fps, 3) if fps and total_frames else None
 
         all_detections: List[Detection] = []
         frame_idx = 0
@@ -238,6 +240,8 @@ class EdgeYoloDetector:
             image_width=w,
             image_height=h,
             frame_count=processed_count,
+            fps=round(fps, 3),
+            duration=duration,
         )
 
     def _deduplicate(

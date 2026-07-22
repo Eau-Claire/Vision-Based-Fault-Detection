@@ -68,7 +68,7 @@ def send_callback(
         "Content-Type": "application/json",
     }
 
-    payload = result.model_dump(by_alias=True, exclude_none=True)
+    payload = result.model_dump(by_alias=True, exclude_none=False)
     payload_json = json.dumps(payload, ensure_ascii=False)
     detection_count = len(result.detections or [])
     category_codes = sorted({det.category_code for det in result.detections or []})

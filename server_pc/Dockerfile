@@ -25,7 +25,7 @@ COPY shared/ /app/shared/
 COPY edge/ /app/edge/
 COPY server_pc/ /app/server_pc/
 
-RUN mkdir -p /app/models/rf_detr /tmp/vision-harness-checkpoints
+RUN mkdir -p /app/models/rf_detr /app/artifacts /tmp/vision-harness-checkpoints
 
 ENV DEVICE_PROFILE=server \
     SERVER_HOST=0.0.0.0 \
@@ -33,6 +33,8 @@ ENV DEVICE_PROFILE=server \
     SERVER_INFERENCE_BACKEND=harness \
     HARNESS_CHECKPOINT_DIR=/tmp/vision-harness-checkpoints \
     RFDETR_DEVICE=cpu \
+    AI_ARTIFACT_DIR=/app/artifacts \
+    AI_ARTIFACT_URL_PATH=/artifacts \
     LOG_FORMAT=json
 
 EXPOSE 8002

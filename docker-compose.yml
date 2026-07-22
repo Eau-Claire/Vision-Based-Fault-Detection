@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -38,8 +36,13 @@ services:
       - AI_SERVICE_KEY=${AI_SERVICE_KEY:?AI_SERVICE_KEY is required}
       - CONFIDENCE_THRESHOLD=0.25
       - ALLOW_PRIVATE_IPS=${ALLOW_PRIVATE_IPS:-true}
+      - AI_ARTIFACT_DIR=/app/artifacts
+      - AI_ARTIFACT_URL_PATH=/artifacts
+      - AI_PUBLIC_BASE_URL=${EDGE_AI_PUBLIC_BASE_URL:-http://localhost:8001}
+      - AI_ARTIFACT_JPEG_QUALITY=${AI_ARTIFACT_JPEG_QUALITY:-90}
     volumes:
-      - ./models:/app/models
+      - ./models:/app/models:ro
+      - edge_artifacts:/app/artifacts
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -68,10 +71,19 @@ services:
       - CONFIDENCE_THRESHOLD=0.30
       - RFDETR_DEVICE=auto
       - ALLOW_PRIVATE_IPS=${ALLOW_PRIVATE_IPS:-true}
+      - AI_ARTIFACT_DIR=/app/artifacts
+      - AI_ARTIFACT_URL_PATH=/artifacts
+      - AI_PUBLIC_BASE_URL=${SERVER_AI_PUBLIC_BASE_URL:-http://localhost:8002}
+      - AI_ARTIFACT_JPEG_QUALITY=${AI_ARTIFACT_JPEG_QUALITY:-90}
     volumes:
-      - ./models:/app/models
+      - ./models:/app/models:ro
+      - server_artifacts:/app/artifacts
+      - server_harness_checkpoints:${HARNESS_CHECKPOINT_DIR:-/tmp/vision-harness-checkpoints}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
   rabbitmq_data:
+  edge_artifacts:
+  server_artifacts:
+  server_harness_checkpoints:

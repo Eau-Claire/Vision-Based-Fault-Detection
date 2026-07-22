@@ -4,10 +4,11 @@ Analysis result DTOs — normalized output contract for both runtimes.
 The callback payload sent to the ASP.NET Core backend uses these schemas.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Any
 from datetime import datetime, timezone
 from enum import Enum
+from uuid import uuid4
 
 
 class AnalysisStatus(str, Enum):
@@ -31,13 +32,38 @@ class BoundingBox(BaseModel):
 class Detection(BaseModel):
     """A single detection from model inference."""
 
+    id: str = Field(default_factory=lambda: str(uuid4()), alias="id")
     category_code: str = Field(..., alias="categoryCode")
+    class_name: Optional[str] = Field(None, alias="class")
     confidence: float = Field(..., ge=0.0, le=1.0)
     bounding_box: BoundingBox = Field(..., alias="boundingBox")
     timestamp_ms: Optional[int] = Field(None, alias="timestampMs")
+    timestamp: Optional[float] = None
     frame_index: Optional[int] = Field(None, alias="frameIndex")
+    image_url: Optional[str] = Field(None, alias="imageUrl")
+    crop_url: Optional[str] = Field(None, alias="cropUrl")
+    gps: Optional[Any] = None
+    tower_id: Optional[str] = Field(None, alias="towerId")
+    asset_id: Optional[str] = Field(None, alias="assetId")
 
     model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def fill_frontend_fields(self):
+        if self.class_name is None:
+            self.class_name = self.category_code
+        if self.timestamp is None and self.timestamp_ms is not None:
+            self.timestamp = round(self.timestamp_ms / 1000, 3)
+        return self
+
+
+class VideoMetadata(BaseModel):
+    """Video metadata used by frontend playback synchronization."""
+
+    duration: Optional[float] = None
+    fps: Optional[float] = None
+    width: int = 0
+    height: int = 0
 
 
 class AnalysisResult(BaseModel):
@@ -50,6 +76,7 @@ class AnalysisResult(BaseModel):
     model_version: Optional[str] = Field(None, alias="modelVersion")
     processing_time_ms: Optional[int] = Field(None, alias="processingTimeMs")
     detections: List[Detection] = Field(default_factory=list)
+    video_metadata: Optional[VideoMetadata] = Field(None, alias="videoMetadata")
     raw_result: Optional[Any] = Field(None, alias="rawResult")
     error_code: Optional[str] = Field(None, alias="errorCode")
     error_message: Optional[str] = Field(None, alias="errorMessage")
@@ -74,3 +101,5 @@ class DetectionResult(BaseModel):
     image_width: int = 0
     image_height: int = 0
     frame_count: int = 0
+    fps: Optional[float] = None
+    duration: Optional[float] = None

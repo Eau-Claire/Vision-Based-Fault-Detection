@@ -31,13 +31,15 @@ COPY shared/ /app/shared/
 COPY edge_raspberry/ /app/edge_raspberry/
 
 # Create models directory
-RUN mkdir -p /app/models/yolo11
+RUN mkdir -p /app/models/yolo11 /app/artifacts
 
 # Default environment variables
 ENV DEVICE_PROFILE=edge \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8001 \
     YOLO_DEVICE=cpu \
+    AI_ARTIFACT_DIR=/app/artifacts \
+    AI_ARTIFACT_URL_PATH=/artifacts \
     LOG_FORMAT=json
 
 EXPOSE 8001

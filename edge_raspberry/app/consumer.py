@@ -97,7 +97,17 @@ def create_edge_consumer(detector, settings):
                 if is_video:
                     from edge_raspberry.app.video_processor import process_video
                     detection_result = process_video(
-                        detector, file_bytes, ext
+                        detector,
+                        file_bytes,
+                        ext,
+                        request_id=request.request_id,
+                        artifact_dir=settings.artifact_dir,
+                        public_base_url=(
+                            settings.artifact_public_base_url
+                            or f"http://localhost:{settings.server_port}"
+                        ),
+                        artifact_url_path=settings.artifact_url_path,
+                        jpeg_quality=settings.artifact_jpeg_quality,
                     )
                 else:
                     # Decode image
@@ -126,6 +136,8 @@ def create_edge_consumer(detector, settings):
                 model_version=detector.model_version,
                 processing_time_ms=processing_time_ms,
                 device_profile="edge",
+                asset_id=request.asset_id,
+                image_url=request.file_url,
             )
 
             callback_url = (

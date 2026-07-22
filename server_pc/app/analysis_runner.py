@@ -60,6 +60,11 @@ class HarnessAnalysisRunner:
         file_bytes: bytes,
         extension: str,
         media_type: str = "Image",
+        request_id: str = "",
+        artifact_dir: str = "",
+        public_base_url: str = "",
+        artifact_url_path: str = "/artifacts",
+        jpeg_quality: int = 90,
     ) -> ServerAnalysisOutput:
         if _is_video(media_type, extension):
             raise ValueError("Harness backend currently supports image media only")
@@ -139,11 +144,25 @@ class LegacyDetectorAnalysisRunner:
         file_bytes: bytes,
         extension: str,
         media_type: str = "Image",
+        request_id: str = "",
+        artifact_dir: str = "",
+        public_base_url: str = "",
+        artifact_url_path: str = "/artifacts",
+        jpeg_quality: int = 90,
     ) -> ServerAnalysisOutput:
         if _is_video(media_type, extension):
             from server_pc.app.video_processor import process_video
 
-            detection_result = process_video(self.detector, file_bytes, extension)
+            detection_result = process_video(
+                self.detector,
+                file_bytes,
+                extension,
+                request_id=request_id,
+                artifact_dir=artifact_dir,
+                public_base_url=public_base_url,
+                artifact_url_path=artifact_url_path,
+                jpeg_quality=jpeg_quality,
+            )
         elif hasattr(self.detector, "detect_image_bytes"):
             detection_result = self.detector.detect_image_bytes(file_bytes)
         else:

@@ -20,6 +20,7 @@ if PROJECT_ROOT not in sys.path:
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 
@@ -84,6 +85,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+Path(settings.artifact_dir).mkdir(parents=True, exist_ok=True)
+app.mount(
+    settings.artifact_url_path,
+    StaticFiles(directory=settings.artifact_dir),
+    name="artifacts",
+)
+
 
 @app.get("/health")
 def health():
@@ -108,6 +116,7 @@ def ready():
 class AnalyzePayload(BaseModel):
     requestId: str
     mediaId: Optional[str] = None
+    assetId: Optional[str] = None
     fileUrl: str
     mediaType: str = "Image"
     analysisType: str = "General"
@@ -159,6 +168,14 @@ def _run_analysis(payload: AnalyzePayload):
                 file_bytes=file_bytes,
                 extension=ext,
                 media_type=payload.mediaType,
+                request_id=payload.requestId,
+                artifact_dir=settings.artifact_dir,
+                public_base_url=(
+                    settings.artifact_public_base_url
+                    or f"http://localhost:{settings.server_port}"
+                ),
+                artifact_url_path=settings.artifact_url_path,
+                jpeg_quality=settings.artifact_jpeg_quality,
             )
 
         ms = int((time.monotonic() - start) * 1000)
@@ -170,6 +187,8 @@ def _run_analysis(payload: AnalyzePayload):
             output.model_version,
             ms,
             "server",
+            asset_id=payload.assetId,
+            image_url=payload.fileUrl,
         )
         if output.harness_run_id:
             result.raw_result["harnessRunId"] = output.harness_run_id

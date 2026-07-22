@@ -98,6 +98,14 @@ def create_server_consumer(analysis_runner, settings):
                         file_bytes=file_bytes,
                         extension=ext,
                         media_type=request.media_type.value,
+                        request_id=request.request_id,
+                        artifact_dir=settings.artifact_dir,
+                        public_base_url=(
+                            settings.artifact_public_base_url
+                            or f"http://localhost:{settings.server_port}"
+                        ),
+                        artifact_url_path=settings.artifact_url_path,
+                        jpeg_quality=settings.artifact_jpeg_quality,
                     )
             except DownloadError as e:
                 _send_failure_callback(
@@ -133,6 +141,8 @@ def create_server_consumer(analysis_runner, settings):
                 model_version=output.model_version,
                 processing_time_ms=processing_time_ms,
                 device_profile="server",
+                asset_id=request.asset_id,
+                image_url=request.file_url,
             )
 
             if output.harness_run_id:

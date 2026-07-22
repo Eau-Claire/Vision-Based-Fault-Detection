@@ -15,7 +15,9 @@ class TestResultMapper(unittest.TestCase):
             detections=[det],
             image_width=1920,
             image_height=1080,
-            frame_count=100
+            frame_count=100,
+            fps=30,
+            duration=132.5
         )
         
         result = map_success_result(
@@ -25,7 +27,9 @@ class TestResultMapper(unittest.TestCase):
             model_name="YOLO11",
             model_version="1.0.0",
             processing_time_ms=150,
-            device_profile="edge"
+            device_profile="edge",
+            asset_id="asset-001",
+            image_url="https://pms.local/media/video.mp4"
         )
         
         self.assertEqual(result.request_id, "req-123")
@@ -34,8 +38,21 @@ class TestResultMapper(unittest.TestCase):
         self.assertEqual(result.model_name, "YOLO11")
         self.assertEqual(result.processing_time_ms, 150)
         self.assertEqual(len(result.detections), 1)
-        self.assertEqual(result.detections[0].category_code, "CI")
+        mapped_detection = result.detections[0]
+        self.assertEqual(mapped_detection.category_code, "CI")
+        self.assertEqual(mapped_detection.class_name, "Cracked Insulator")
+        self.assertEqual(mapped_detection.timestamp, 1.0)
+        self.assertEqual(mapped_detection.frame_index, 30)
+        self.assertEqual(mapped_detection.image_url, "https://pms.local/media/video.mp4")
+        self.assertIsNone(mapped_detection.crop_url)
+        self.assertEqual(mapped_detection.asset_id, "asset-001")
+        self.assertEqual(result.video_metadata.duration, 132.5)
+        self.assertEqual(result.video_metadata.fps, 30)
+        self.assertEqual(result.video_metadata.width, 1920)
+        self.assertEqual(result.video_metadata.height, 1080)
         self.assertEqual(result.raw_result["imageWidth"], 1920)
+        self.assertEqual(result.raw_result["fps"], 30)
+        self.assertEqual(result.raw_result["duration"], 132.5)
         self.assertEqual(result.raw_result["deviceProfile"], "edge")
 
     def test_map_success_empty_detections(self):

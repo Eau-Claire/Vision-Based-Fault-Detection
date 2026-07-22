@@ -36,3 +36,19 @@ runs/
 .DS_Store
 Thumbs.db
 .ipynb_checkpoints/
+# Local secrets and deployment overrides
+.env.*
+!.env.example
+
+# Generated AI artifacts and runtime state
+artifacts/
+vision-ai-artifacts/
+vision-harness-checkpoints/
+*.sqlite
+*.db
+
+# Test and coverage outputs
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/

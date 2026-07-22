@@ -19,7 +19,9 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 
@@ -113,6 +115,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+Path(settings.artifact_dir).mkdir(parents=True, exist_ok=True)
+app.mount(
+    settings.artifact_url_path,
+    StaticFiles(directory=settings.artifact_dir),
+    name="artifacts",
+)
+
 
 # ── Health Endpoints ──
 @app.get("/health")
@@ -145,6 +154,7 @@ def ready():
 class AnalyzePayload(BaseModel):
     requestId: str
     mediaId: Optional[str] = None
+    assetId: Optional[str] = None
     fileUrl: str
     mediaType: str = "Image"
     analysisType: str = "General"
@@ -199,7 +209,19 @@ def _run_analysis(payload: AnalyzePayload):
         )
 
         if is_video:
-            detection_result = process_video(detector, file_bytes, ext)
+            detection_result = process_video(
+                detector,
+                file_bytes,
+                ext,
+                request_id=payload.requestId,
+                artifact_dir=settings.artifact_dir,
+                public_base_url=(
+                    settings.artifact_public_base_url
+                    or f"http://localhost:{settings.server_port}"
+                ),
+                artifact_url_path=settings.artifact_url_path,
+                jpeg_quality=settings.artifact_jpeg_quality,
+            )
         else:
             nparr = np.frombuffer(file_bytes, np.uint8)
             image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -217,6 +239,8 @@ def _run_analysis(payload: AnalyzePayload):
             model_version=detector.model_version,
             processing_time_ms=processing_time_ms,
             device_profile="edge",
+            asset_id=payload.assetId,
+            image_url=payload.fileUrl,
         )
 
     except Exception as e:

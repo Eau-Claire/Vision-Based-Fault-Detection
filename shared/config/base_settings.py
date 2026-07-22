@@ -61,6 +61,14 @@ class BaseAppSettings(BaseSettings):
         500 * 1024 * 1024, alias="MEDIA_MAX_SIZE_BYTES"  # 500 MB
     )
 
+    # ── Detection Artifacts ──
+    artifact_dir: str = Field(
+        "/tmp/vision-ai-artifacts", alias="AI_ARTIFACT_DIR"
+    )
+    artifact_url_path: str = Field("/artifacts", alias="AI_ARTIFACT_URL_PATH")
+    artifact_public_base_url: str = Field("", alias="AI_PUBLIC_BASE_URL")
+    artifact_jpeg_quality: int = Field(90, alias="AI_ARTIFACT_JPEG_QUALITY")
+
     # ── Security ──
     allow_private_ips: bool = Field(False, alias="ALLOW_PRIVATE_IPS")
     restrict_callback_to_base_url: bool = Field(True, alias="RESTRICT_CALLBACK_TO_BASE_URL")
@@ -107,6 +115,9 @@ class BaseAppSettings(BaseSettings):
             raise ValueError("AI_SERVICE_KEY must be configured")
         if self.ai_service_key == "AI-Service-Secret-Token-Key-12345":
             raise ValueError("AI_SERVICE_KEY must not use the sample development secret")
+
+        self.artifact_url_path = "/" + self.artifact_url_path.strip("/")
+        self.artifact_jpeg_quality = max(1, min(100, self.artifact_jpeg_quality))
         return self
 
     @property
