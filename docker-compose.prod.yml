@@ -49,10 +49,16 @@ services:
       - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.30}
       - RFDETR_DEVICE=auto
       - ALLOW_PRIVATE_IPS=${ALLOW_PRIVATE_IPS:-false}
+      - AI_ARTIFACT_DIR=/app/artifacts
+      - AI_ARTIFACT_URL_PATH=/artifacts
+      - AI_PUBLIC_BASE_URL=${SERVER_AI_PUBLIC_BASE_URL:-${AI_PUBLIC_BASE_URL:-http://localhost:8002}}
+      - AI_ARTIFACT_JPEG_QUALITY=${AI_ARTIFACT_JPEG_QUALITY:-90}
     volumes:
       - ./models:/app/models
+      - server_artifacts:/app/artifacts
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
   rabbitmq_prod_data:
+  server_artifacts:
