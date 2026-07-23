@@ -49,15 +49,17 @@ ai-project/
 ## Hướng dẫn Khởi chạy Dịch vụ
 
 ### 1. Cài đặt Cấu hình Môi trường
-Sao chép tệp mẫu cấu hình sang `.env` và tùy chỉnh theo nhu cầu:
+Production AI dùng một file env riêng, không dùng chung `.env` của PMS:
 ```bash
-cp .env.example .env
+cp .env.ai.example .env.ai
 ```
 
+Điền các giá trị thật vào `.env.ai`, đặc biệt `RABBITMQ_PASS`, `AI_SERVICE_KEY` và `ROBOFLOW_API_KEY`. File `.env.ai` không được commit.
+
 ### 2. Khởi chạy bằng Docker Compose
-Dùng Docker Compose để chạy cả 2 module AI cùng dịch vụ RabbitMQ đi kèm:
+Dùng đúng một file Compose production. RabbitMQ và Gateway được dùng từ PMS, không tạo broker riêng:
 ```bash
-docker-compose up --build -d
+docker compose --env-file .env.ai up -d --build
 ```
 
 ### 3. Chạy từng Module độc lập cục bộ (Local Development)
@@ -90,13 +92,13 @@ Dịch vụ sẽ khởi động và lắng nghe tại cổng `8002`. Production 
 Docker `server_pc` production mặc định dùng Roboflow hosted workflow và không cài RF-DETR/PyTorch CUDA. Deploy riêng server PC bằng:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build server_pc
+docker compose --env-file .env.ai up -d --build server_pc
 ```
 
 Chỉ khi cần backend RF-DETR local mới build thêm dependency ML CPU-only:
 
 ```bash
-INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose -f docker-compose.prod.yml up -d --build server_pc
+INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose --env-file .env.ai up -d --build server_pc
 ```
 
 ---
@@ -107,7 +109,7 @@ Workflow hosted đã được tích hợp trong `shared/services/roboflow_workfl
 
 - Workspace slug: `les-workspace-ijdwd`
 - Workflow slug: `evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic`
-- API URL: configurable with `ROBOFLOW_API_URL`; for host-local Roboflow Inference from Docker use `http://host.docker.internal:9001`
+- API URL: production dùng service nội bộ `http://roboflow-inference:9001`
 - Declared input: `image`
 - Declared runtime parameters: none
 - Declared output key: `predictions`
@@ -148,18 +150,19 @@ ALLOW_PRIVATE_IPS=true \
 .venv/bin/uvicorn server_pc.app.main:app --host 0.0.0.0 --port 8002
 ```
 
-Docker mode, khi PMS compose đã tạo network `pms_default` và các container `uav-rabbitmq`, `uav-gateway` đang chạy:
+Docker mode, khi PMS compose đã tạo network `uavpms_org_default` và các container `uav-rabbitmq`, `uav-gateway` đang chạy:
 
 ```bash
-docker compose --env-file /home/minhchau/Documents/PMS/.env -f docker-compose.pms.yml up -d --build server_pc
+docker compose --env-file .env.ai up -d --build
 ```
 
-Override `docker-compose.pms.yml` cấu hình:
+`.env.ai` chứa các cấu hình tích hợp:
 
 - `RABBITMQ_HOST=uav-rabbitmq`
 - `CALLBACK_BASE_URL=http://uav-gateway:8080`
 - `AI_SERVICE_KEY` lấy cùng giá trị với `AIService_ServiceKey` bên PMS
 - `PMS_DOCKER_NETWORK` mặc định là `uavpms_org_default`; đổi biến này nếu PMS compose tạo network tên khác
+- `ROBOFLOW_API_URL` không cần khai báo vì Compose cố định vào `http://roboflow-inference:9001`
 
 Kiểm tra nhanh:
 

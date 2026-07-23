@@ -18,6 +18,7 @@ runs/
 
 # Environment & IDE
 .env
+.env.ai
 .vscode/
 .idea/
 
@@ -39,6 +40,7 @@ Thumbs.db
 # Local secrets and deployment overrides
 .env.*
 !.env.example
+!.env.ai.example
 
 # Generated AI artifacts and runtime state
 artifacts/
