@@ -29,6 +29,8 @@ services:
         INSTALL_LOCAL_ML: ${INSTALL_LOCAL_ML:-false}
     image: ${AI_SERVER_IMAGE:-aipms-server-pc:latest}
     container_name: ai_server_pc
+    env_file:
+      - .env.ai
     restart: unless-stopped
     depends_on:
       roboflow-inference:
@@ -39,24 +41,9 @@ services:
       DEVICE_PROFILE: server
       SERVER_INFERENCE_BACKEND: ${SERVER_INFERENCE_BACKEND:-roboflow}
       HARNESS_CHECKPOINT_DIR: ${HARNESS_CHECKPOINT_DIR:-/tmp/vision-harness-checkpoints}
-      RABBITMQ_HOST: ${RABBITMQ_HOST:-uav-rabbitmq}
-      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
-      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_PASS: ${RABBITMQ_PASS:?RABBITMQ_PASS is required}
-      CALLBACK_BASE_URL: ${CALLBACK_BASE_URL:-http://uav-gateway:8080}
-      AI_SERVICE_KEY: ${AI_SERVICE_KEY:?AI_SERVICE_KEY is required}
-      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.30}
-      RFDETR_DEVICE: ${RFDETR_DEVICE:-auto}
-      ALLOW_PRIVATE_IPS: ${ALLOW_PRIVATE_IPS:-false}
-      RESTRICT_CALLBACK_TO_BASE_URL: ${RESTRICT_CALLBACK_TO_BASE_URL:-true}
-      AI_ARTIFACT_DIR: /app/artifacts
-      AI_ARTIFACT_URL_PATH: /artifacts
-      AI_PUBLIC_BASE_URL: ${AI_PUBLIC_BASE_URL:-http://localhost:8002}
-      AI_ARTIFACT_JPEG_QUALITY: ${AI_ARTIFACT_JPEG_QUALITY:-90}
-      ROBOFLOW_API_KEY: ${ROBOFLOW_API_KEY:?ROBOFLOW_API_KEY is required}
+      AI_ARTIFACT_DIR: ${AI_ARTIFACT_DIR:-/app/artifacts}
+      AI_PUBLIC_BASE_URL: ${AI_PUBLIC_BASE_URL:-${SERVER_AI_PUBLIC_BASE_URL:-http://localhost:8002}}
       ROBOFLOW_API_URL: http://roboflow-inference:9001
-      ROBOFLOW_WORKSPACE_NAME: ${ROBOFLOW_WORKSPACE_NAME:-les-workspace-ijdwd}
-      ROBOFLOW_WORKFLOW_ID: ${ROBOFLOW_WORKFLOW_ID:-evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic}
     volumes:
       - ./models:/app/models:ro
       - server_artifacts:/app/artifacts
