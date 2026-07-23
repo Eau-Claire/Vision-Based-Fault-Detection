@@ -151,7 +151,7 @@ ALLOW_PRIVATE_IPS=true \
 Docker mode, khi PMS compose đã tạo network `pms_default` và các container `uav-rabbitmq`, `uav-gateway` đang chạy:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.pms.yml up -d --build server_pc
+docker compose --env-file /home/minhchau/Documents/PMS/.env -f docker-compose.pms.yml up -d --build server_pc
 ```
 
 Override `docker-compose.pms.yml` cấu hình:
