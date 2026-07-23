@@ -51,15 +51,15 @@ ai-project/
 ### 1. Cài đặt Cấu hình Môi trường
 Production AI dùng một file env riêng, không dùng chung `.env` của PMS:
 ```bash
-cp .env.example .env.ai
+cp .env.example .env
 ```
 
-Điền các giá trị thật vào `.env.ai`, đặc biệt `RABBITMQ_PASS`, `AI_SERVICE_KEY` và `ROBOFLOW_API_KEY`. File `.env.ai` không được commit.
+Điền các giá trị thật vào `.env`, đặc biệt `RABBITMQ_PASS`, `AI_SERVICE_KEY` và `ROBOFLOW_API_KEY`. File `.env` của AI không được commit.
 
 ### 2. Khởi chạy bằng Docker Compose
 Dùng đúng một file Compose production. RabbitMQ và Gateway được dùng từ PMS, không tạo broker riêng:
 ```bash
-docker compose --env-file .env.ai up -d --build
+docker compose up -d --build
 ```
 
 ### 3. Chạy từng Module độc lập cục bộ (Local Development)
@@ -92,13 +92,13 @@ Dịch vụ sẽ khởi động và lắng nghe tại cổng `8002`. Production 
 Docker `server_pc` production mặc định dùng Roboflow hosted workflow và không cài RF-DETR/PyTorch CUDA. Deploy riêng server PC bằng:
 
 ```bash
-docker compose --env-file .env.ai up -d --build server_pc
+docker compose up -d --build server_pc
 ```
 
 Chỉ khi cần backend RF-DETR local mới build thêm dependency ML CPU-only:
 
 ```bash
-INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose --env-file .env.ai up -d --build server_pc
+INSTALL_LOCAL_ML=true SERVER_INFERENCE_BACKEND=local docker compose up -d --build server_pc
 ```
 
 ---
@@ -153,10 +153,10 @@ ALLOW_PRIVATE_IPS=true \
 Docker mode, khi PMS compose đã tạo network `uavpms_org_default` và các container `uav-rabbitmq`, `uav-gateway` đang chạy:
 
 ```bash
-docker compose --env-file .env.ai up -d --build
+docker compose up -d --build
 ```
 
-`.env.ai` chứa các cấu hình tích hợp:
+`.env` của AI chứa các cấu hình tích hợp:
 
 - `RABBITMQ_HOST=uav-rabbitmq`
 - `CALLBACK_BASE_URL=http://uav-gateway:8080`

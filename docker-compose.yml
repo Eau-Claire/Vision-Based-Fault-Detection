@@ -30,7 +30,7 @@ services:
     image: ${AI_SERVER_IMAGE:-aipms-server-pc:latest}
     container_name: ai_server_pc
     env_file:
-      - .env.ai
+      - .env
     restart: unless-stopped
     depends_on:
       roboflow-inference:

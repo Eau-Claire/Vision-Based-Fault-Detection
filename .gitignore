@@ -18,7 +18,6 @@ runs/
 
 # Environment & IDE
 .env
-.env.ai
 .vscode/
 .idea/
 
