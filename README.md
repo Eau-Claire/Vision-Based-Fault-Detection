@@ -131,6 +131,48 @@ Client dùng `InferenceHTTPClient.run_workflow(...)`, timeout theo attempt, retr
 
 Lưu ý: lần kiểm tra live ngày 2026-07-19 bằng Roboflow MCP trả về lỗi server-side 500 vì workflow wrapper đang bind `model_id` vào child workflow, trong khi child workflow chỉ khai báo `class_agnostic_nms`, `confidence`, `image`, `iou_threshold`, và `max_detections`. Cần publish lại workflow trên Roboflow trước khi smoke test live có thể pass.
 
+---
+
+## PMS Integration
+
+Khi chạy cùng UAV PMS microservices, AI service phải dùng chung RabbitMQ và callback về Ocelot/API backend của PMS. Không chạy RabbitMQ riêng cho luồng tích hợp PMS, nếu không consumer sẽ nghe nhầm broker và job AI sẽ không được xử lý.
+
+Local host mode, khi PMS gateway đang chạy ở `http://localhost:5194` và RabbitMQ publish port `5672`:
+
+```bash
+cd /home/minhchau/Documents/Vision-Based-Fault-Detection
+CALLBACK_BASE_URL=http://localhost:5194 \
+RABBITMQ_HOST=localhost \
+RABBITMQ_PORT=5672 \
+ALLOW_PRIVATE_IPS=true \
+.venv/bin/uvicorn server_pc.app.main:app --host 0.0.0.0 --port 8002
+```
+
+Docker mode, khi PMS compose đã tạo network `pms_default` và các container `uav-rabbitmq`, `uav-gateway` đang chạy:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.pms.yml up -d --build server_pc
+```
+
+Override `docker-compose.pms.yml` cấu hình:
+
+- `RABBITMQ_HOST=uav-rabbitmq`
+- `CALLBACK_BASE_URL=http://uav-gateway:8080`
+- `AI_SERVICE_KEY` lấy cùng giá trị với `AIService_ServiceKey` bên PMS
+
+Kiểm tra nhanh:
+
+```bash
+curl http://localhost:8002/health
+curl http://localhost:8002/ready
+```
+
+RabbitMQ binding kỳ vọng:
+
+```text
+identity-exchange -> ai.analysis.server.requested -> identity.event.aianalysisrequestedevent.server
+```
+
 ## Kiểm thử (Testing)
 
 Chạy bộ unit test kiểm tra bbox, class mapping, callback retry, và routing rules:

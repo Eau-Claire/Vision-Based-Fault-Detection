@@ -1,0 +1,30 @@
+services:
+  server_pc:
+    environment:
+      RABBITMQ_HOST: ${PMS_RABBITMQ_HOST:-uav-rabbitmq}
+      RABBITMQ_PORT: ${PMS_RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
+      CALLBACK_BASE_URL: ${PMS_CALLBACK_BASE_URL:-http://uav-gateway:8080}
+      AI_SERVICE_KEY: ${AI_SERVICE_KEY:?AI_SERVICE_KEY is required}
+      ALLOW_PRIVATE_IPS: ${ALLOW_PRIVATE_IPS:-true}
+      RESTRICT_CALLBACK_TO_BASE_URL: ${RESTRICT_CALLBACK_TO_BASE_URL:-true}
+    networks:
+      - pms_default
+
+  edge_raspberry:
+    environment:
+      RABBITMQ_HOST: ${PMS_RABBITMQ_HOST:-uav-rabbitmq}
+      RABBITMQ_PORT: ${PMS_RABBITMQ_PORT:-5672}
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-guest}
+      CALLBACK_BASE_URL: ${PMS_CALLBACK_BASE_URL:-http://uav-gateway:8080}
+      AI_SERVICE_KEY: ${AI_SERVICE_KEY:?AI_SERVICE_KEY is required}
+      ALLOW_PRIVATE_IPS: ${ALLOW_PRIVATE_IPS:-true}
+      RESTRICT_CALLBACK_TO_BASE_URL: ${RESTRICT_CALLBACK_TO_BASE_URL:-true}
+    networks:
+      - pms_default
+
+networks:
+  pms_default:
+    external: true
