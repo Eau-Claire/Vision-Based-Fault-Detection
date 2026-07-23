@@ -159,6 +159,7 @@ Override `docker-compose.pms.yml` cấu hình:
 - `RABBITMQ_HOST=uav-rabbitmq`
 - `CALLBACK_BASE_URL=http://uav-gateway:8080`
 - `AI_SERVICE_KEY` lấy cùng giá trị với `AIService_ServiceKey` bên PMS
+- `PMS_DOCKER_NETWORK` mặc định là `uavpms_org_default`; đổi biến này nếu PMS compose tạo network tên khác
 
 Kiểm tra nhanh:
 

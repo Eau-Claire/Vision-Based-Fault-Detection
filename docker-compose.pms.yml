@@ -81,3 +81,4 @@ volumes:
 networks:
   pms_default:
     external: true
+    name: ${PMS_DOCKER_NETWORK:-uavpms_org_default}
