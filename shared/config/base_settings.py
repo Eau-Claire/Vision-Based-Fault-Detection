@@ -85,7 +85,7 @@ class BaseAppSettings(BaseSettings):
         "les-workspace-ijdwd", alias="ROBOFLOW_WORKSPACE_NAME"
     )
     roboflow_workflow_id: str = Field(
-        "evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic",
+        "evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic",
         alias="ROBOFLOW_WORKFLOW_ID",
     )
     roboflow_timeout: int = Field(30, alias="ROBOFLOW_TIMEOUT")

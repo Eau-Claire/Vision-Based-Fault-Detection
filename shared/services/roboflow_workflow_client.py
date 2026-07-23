@@ -29,7 +29,7 @@ logger = get_logger("roboflow_workflow")
 ROBOFLOW_API_URL = "https://serverless.roboflow.com"
 ROBOFLOW_WORKSPACE_NAME = "les-workspace-ijdwd"
 ROBOFLOW_WORKFLOW_ID = (
-    "evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic"
+    "evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic"
 )
 ROBOFLOW_IMAGE_INPUT_NAME = "image"
 ROBOFLOW_DECLARED_PARAMETERS: Dict[str, Any] = {}

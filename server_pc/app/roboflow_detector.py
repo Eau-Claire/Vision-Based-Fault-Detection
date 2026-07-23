@@ -34,7 +34,7 @@ class ServerRoboflowWorkflowDetector:
         api_url: str = "https://serverless.roboflow.com",
         workspace_name: str = "les-workspace-ijdwd",
         workflow_id: str = (
-            "evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic"
+            "evn-object-detection-vevn-object-detection-cnyo0-2-yolo11n-t1-logic"
         ),
     ):
         if not api_key:
