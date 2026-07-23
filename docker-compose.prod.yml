@@ -37,9 +37,7 @@ services:
       - SERVER_INFERENCE_BACKEND=${SERVER_INFERENCE_BACKEND:-roboflow}
       - HARNESS_CHECKPOINT_DIR=${HARNESS_CHECKPOINT_DIR:-/tmp/vision-harness-checkpoints}
       - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY:?ROBOFLOW_API_KEY is required for roboflow backend}
-      # Use the hosted workflow by default. Set ROBOFLOW_API_URL explicitly
-      # only when a locally configured inference server is intended.
-      - ROBOFLOW_API_URL=${ROBOFLOW_API_URL:-https://serverless.roboflow.com}
+      - ROBOFLOW_API_URL=${ROBOFLOW_API_URL:-http://host.docker.internal:9001}
       - ROBOFLOW_WORKSPACE_NAME=${ROBOFLOW_WORKSPACE_NAME:-les-workspace-ijdwd}
       - ROBOFLOW_WORKFLOW_ID=${ROBOFLOW_WORKFLOW_ID:-evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic}
       - RABBITMQ_HOST=rabbitmq
