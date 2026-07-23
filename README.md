@@ -51,7 +51,7 @@ ai-project/
 ### 1. Cài đặt Cấu hình Môi trường
 Production AI dùng một file env riêng, không dùng chung `.env` của PMS:
 ```bash
-cp .env.ai.example .env.ai
+cp .env.example .env.ai
 ```
 
 Điền các giá trị thật vào `.env.ai`, đặc biệt `RABBITMQ_PASS`, `AI_SERVICE_KEY` và `ROBOFLOW_API_KEY`. File `.env.ai` không được commit.
