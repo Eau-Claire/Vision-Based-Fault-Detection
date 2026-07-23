@@ -27,7 +27,7 @@ services:
       AI_PUBLIC_BASE_URL: ${SERVER_AI_PUBLIC_BASE_URL:-http://localhost:8002}
       AI_ARTIFACT_JPEG_QUALITY: ${AI_ARTIFACT_JPEG_QUALITY:-90}
       ROBOFLOW_API_KEY: ${ROBOFLOW_API_KEY:-}
-      ROBOFLOW_API_URL: ${ROBOFLOW_API_URL:-https://serverless.roboflow.com}
+      ROBOFLOW_API_URL: ${ROBOFLOW_API_URL:-http://roboflow-inference:9001}
       ROBOFLOW_WORKSPACE_NAME: ${ROBOFLOW_WORKSPACE_NAME:-les-workspace-ijdwd}
       ROBOFLOW_WORKFLOW_ID: ${ROBOFLOW_WORKFLOW_ID:-evn-object-detection-vevn-object-detection-cnyo0-1-rfdetr-small-t1-logic}
     volumes:
