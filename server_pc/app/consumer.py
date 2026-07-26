@@ -1,23 +1,30 @@
 """
 RabbitMQ consumer for server_pc runtime.
 
-Consumes analysis jobs from the server queue, runs the configured server analysis runner,
-and sends results back via callback. Acknowledges messages only
-after successful callback delivery.
+Consumes analysis jobs from the server queue, runs the configured server
+analysis runner, and publishes result events back to RabbitMQ.
 """
 
 import json
 import time
 import threading
+from datetime import UTC, datetime
+from json import JSONDecodeError
+
+import pika
 from shared.schemas.analysis_request import AnalysisRequest, PreferredModel
-from shared.services.callback_service import send_callback, CallbackError
 from shared.services.media_downloader import (
     download_media,
     resolve_media_url,
     DownloadError,
 )
 from shared.services.result_mapper import map_success_result, map_failure_result
+from shared.services.result_event_mapper import map_result_to_event
 from shared.messaging.rabbitmq_client import consume_with_reconnect
+from shared.messaging.result_publisher import (
+    publish_analysis_result,
+    ResultPublishError,
+)
 from shared.utils.logging import (
     get_logger,
     set_correlation_context,
@@ -41,6 +48,7 @@ def create_server_consumer(analysis_runner, settings):
     def on_message(ch, method, properties, body):
         """Handle incoming analysis request messages."""
         start_time = time.monotonic()
+        retry_count = _get_retry_count(properties)
 
         try:
             payload = json.loads(body.decode("utf-8"))
@@ -108,10 +116,10 @@ def create_server_consumer(analysis_runner, settings):
                         jpeg_quality=settings.artifact_jpeg_quality,
                     )
             except DownloadError as e:
-                _send_failure_callback(
-                    request, settings, "MEDIA_DOWNLOAD_FAILED", str(e)
+                result = _build_failure_result(
+                    request, "MEDIA_DOWNLOAD_FAILED", str(e)
                 )
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+                _publish_result_and_finalize(ch, method.delivery_tag, result, settings)
                 return
             except Exception as e:
                 logger.error(
@@ -122,13 +130,13 @@ def create_server_consumer(analysis_runner, settings):
                         "error_code": "MODEL_INFERENCE_FAILED",
                     },
                 )
-                _send_failure_callback(
-                    request, settings, "MODEL_INFERENCE_FAILED", str(e)
+                result = _build_failure_result(
+                    request, "MODEL_INFERENCE_FAILED", str(e)
                 )
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+                _publish_result_and_finalize(ch, method.delivery_tag, result, settings)
                 return
 
-            # Build and send success callback
+            # Build and publish success result
             processing_time_ms = int(
                 (time.monotonic() - start_time) * 1000
             )
@@ -142,6 +150,8 @@ def create_server_consumer(analysis_runner, settings):
                 processing_time_ms=processing_time_ms,
                 device_profile="server",
                 asset_id=request.asset_id,
+                mission_id=request.mission_id,
+                correlation_id=request.correlation_id,
                 image_url=request.file_url,
             )
 
@@ -150,24 +160,8 @@ def create_server_consumer(analysis_runner, settings):
             if output.harness_checkpoint_path:
                 result.raw_result["harnessCheckpointPath"] = output.harness_checkpoint_path
 
-            callback_url = (
-                request.callback_url or settings.callback_url
-            )
-
             try:
-                send_callback(
-                    result=result,
-                    callback_url=callback_url,
-                    service_key=settings.ai_service_key,
-                    max_retries=settings.callback_max_retries,
-                    base_delay=settings.callback_retry_base_delay,
-                    max_delay=settings.callback_retry_max_delay,
-                    timeout=settings.callback_timeout,
-                    restrict_to_base_url=settings.callback_base_url if settings.restrict_callback_to_base_url else None,
-                    allow_private_ips=settings.allow_private_ips,
-                )
-                # Acknowledge only after successful callback
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+                _publish_result_and_finalize(ch, method.delivery_tag, result, settings)
                 logger.info(
                     f"Job {request.request_id} completed successfully "
                     f"in {processing_time_ms}ms",
@@ -176,18 +170,16 @@ def create_server_consumer(analysis_runner, settings):
                         "duration_ms": processing_time_ms,
                     },
                 )
-            except CallbackError:
-                # Callback delivery failed after all retries — reject to DLQ
+            except ResultPublishError:
                 logger.error(
-                    f"Callback delivery failed for job {request.request_id}, "
-                    f"rejecting to DLQ",
-                    extra={"event": "job_callback_failed"},
+                    f"Result publish failed for job {request.request_id}",
+                    extra={"event": "job_result_publish_failed"},
                 )
                 ch.basic_nack(
                     delivery_tag=method.delivery_tag, requeue=False
                 )
 
-        except json.JSONDecodeError as e:
+        except JSONDecodeError as e:
             logger.error(
                 f"Invalid JSON in message: {e}",
                 extra={"event": "job_invalid_json"},
@@ -200,7 +192,9 @@ def create_server_consumer(analysis_runner, settings):
                 exc_info=True,
                 extra={"event": "job_unexpected_error"},
             )
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            _retry_or_dead_letter(
+                ch, method.delivery_tag, body, properties, settings, retry_count
+            )
 
         finally:
             clear_correlation_context()
@@ -212,33 +206,63 @@ def _can_analyze_image_url(analysis_runner, media_type: str) -> bool:
     return media_type.lower() == "image" and hasattr(analysis_runner, "analyze_url")
 
 
-def _send_failure_callback(request, settings, error_code, error_message):
-    """Send a failure callback to the backend."""
-    result = map_failure_result(
+def _build_failure_result(request, error_code, error_message):
+    return map_failure_result(
         request_id=request.request_id,
         media_id=request.media_id,
+        mission_id=request.mission_id,
+        asset_id=request.asset_id,
+        correlation_id=request.correlation_id,
         error_code=error_code,
         error_message=error_message,
     )
 
-    callback_url = request.callback_url or settings.callback_url
+
+def _publish_result_and_finalize(ch, delivery_tag, result, settings):
+    result_event = map_result_to_event(result)
+    publish_analysis_result(
+        ch,
+        result_event,
+        routing_key=settings.result_routing_key,
+        exchange=settings.result_exchange,
+    )
+
+    ch.basic_ack(delivery_tag=delivery_tag)
+
+
+def _get_retry_count(properties) -> int:
+    headers = getattr(properties, "headers", None) or {}
+    raw = headers.get("x-retry-count", 0)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _retry_or_dead_letter(ch, delivery_tag, body, properties, settings, retry_count):
+    if retry_count >= settings.message_retry_limit:
+        ch.basic_nack(delivery_tag=delivery_tag, requeue=False)
+        return
 
     try:
-        send_callback(
-            result=result,
-            callback_url=callback_url,
-            service_key=settings.ai_service_key,
-            max_retries=settings.callback_max_retries,
-            base_delay=settings.callback_retry_base_delay,
-            timeout=settings.callback_timeout,
-            restrict_to_base_url=settings.callback_base_url if settings.restrict_callback_to_base_url else None,
-            allow_private_ips=settings.allow_private_ips,
+        headers = dict(getattr(properties, "headers", None) or {})
+        headers["x-retry-count"] = retry_count + 1
+        ch.basic_publish(
+            exchange="",
+            routing_key=settings.server_queue_name,
+            body=body,
+            properties=pika.BasicProperties(
+                content_type="application/json",
+                delivery_mode=2,
+                headers=headers,
+                correlation_id=getattr(properties, "correlation_id", None),
+                message_id=getattr(properties, "message_id", None),
+                timestamp=int(datetime.now(UTC).timestamp()),
+            ),
         )
-    except CallbackError:
-        logger.error(
-            f"Failed to deliver failure callback for {request.request_id}",
-            extra={"event": "failure_callback_failed"},
-        )
+        ch.basic_ack(delivery_tag=delivery_tag)
+    except Exception:
+        ch.basic_nack(delivery_tag=delivery_tag, requeue=False)
 
 
 def start_server_consumer(analysis_runner, settings):

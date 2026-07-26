@@ -67,10 +67,13 @@ class VideoMetadata(BaseModel):
 
 
 class AnalysisResult(BaseModel):
-    """Callback payload sent to /api/internal/ai-analysis/results."""
+    """Normalized AI analysis result before RabbitMQ event mapping."""
 
     request_id: str = Field(..., alias="requestId")
     media_id: Optional[str] = Field(None, alias="mediaId")
+    mission_id: Optional[str] = Field(None, alias="missionId")
+    asset_id: Optional[str] = Field(None, alias="assetId")
+    correlation_id: Optional[str] = Field(None, alias="correlationId")
     status: AnalysisStatus = Field(AnalysisStatus.COMPLETED)
     model_name: Optional[str] = Field(None, alias="modelName")
     model_version: Optional[str] = Field(None, alias="modelVersion")
@@ -85,6 +88,33 @@ class AnalysisResult(BaseModel):
         .isoformat()
         .replace("+00:00", "Z"),
         alias="completedAt",
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+class AnalysisResultEvent(BaseModel):
+    """RabbitMQ integration event carrying AI analysis completion/failure."""
+
+    event_id: str = Field(default_factory=lambda: str(uuid4()), alias="eventId")
+    correlation_id: str = Field(..., alias="correlationId")
+    analysis_id: str = Field(..., alias="analysisId")
+    inspection_id: str = Field(..., alias="inspectionId")
+    media_id: Optional[str] = Field(None, alias="mediaId")
+    mission_id: Optional[str] = Field(None, alias="missionId")
+    asset_id: Optional[str] = Field(None, alias="assetId")
+    status: AnalysisStatus
+    model_name: Optional[str] = Field(None, alias="modelName")
+    model_version: Optional[str] = Field(None, alias="modelVersion")
+    processing_time_ms: Optional[int] = Field(None, alias="processingTimeMs")
+    results: List[Detection] = Field(default_factory=list, alias="results")
+    video_metadata: Optional[VideoMetadata] = Field(None, alias="videoMetadata")
+    raw_result: Optional[Any] = Field(None, alias="rawResult")
+    error_code: Optional[str] = Field(None, alias="errorCode")
+    error_message: Optional[str] = Field(None, alias="errorMessage")
+    processed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        alias="processedAt",
     )
 
     model_config = {"populate_by_name": True}

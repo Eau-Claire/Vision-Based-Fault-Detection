@@ -35,6 +35,25 @@ class BaseAppSettings(BaseSettings):
     dead_letter_queue: str = Field(
         "ai.analysis.dead-letter", alias="DEAD_LETTER_QUEUE"
     )
+    result_exchange: str = Field(
+        "identity-exchange", alias="RESULT_EXCHANGE"
+    )
+    result_routing_key: str = Field(
+        "identity.event.aianalysisresultevent",
+        alias="RESULT_ROUTING_KEY",
+    )
+    result_queue_name: str = Field(
+        "ai.analysis.result", alias="RESULT_QUEUE_NAME"
+    )
+    result_retry_queue_name: str = Field(
+        "ai.analysis.result.retry", alias="RESULT_RETRY_QUEUE_NAME"
+    )
+    result_dead_letter_queue: str = Field(
+        "ai.analysis.result.dead-letter",
+        alias="RESULT_DEAD_LETTER_QUEUE",
+    )
+    message_retry_limit: int = Field(3, alias="MESSAGE_RETRY_LIMIT")
+    retry_delay_ms: int = Field(15000, alias="MESSAGE_RETRY_DELAY_MS")
 
     # ── Backend Callback ──
     callback_base_url: str = Field(
@@ -54,6 +73,7 @@ class BaseAppSettings(BaseSettings):
         30.0, alias="CALLBACK_RETRY_MAX_DELAY"
     )
     callback_timeout: int = Field(15, alias="CALLBACK_TIMEOUT")
+    enable_http_callback: bool = Field(False, alias="ENABLE_HTTP_CALLBACK")
 
     # ── Media Download ──
     media_download_timeout: int = Field(60, alias="MEDIA_DOWNLOAD_TIMEOUT")

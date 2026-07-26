@@ -137,13 +137,16 @@ Lưu ý: lần kiểm tra live ngày 2026-07-19 bằng Roboflow MCP trả về l
 
 ## PMS Integration
 
-Khi chạy cùng UAV PMS microservices, AI service phải dùng chung RabbitMQ và callback về Ocelot/API backend của PMS. Không chạy RabbitMQ riêng cho luồng tích hợp PMS, nếu không consumer sẽ nghe nhầm broker và job AI sẽ không được xử lý.
+Khi chạy cùng UAV PMS microservices, AI service phải dùng chung RabbitMQ với PMS. Luồng chính hiện tại là:
+
+`AIInspectionService -> RabbitMQ request -> Python AI consume -> RabbitMQ result -> AIInspectionService consume result`
+
+Với `server_pc`, HTTP callback không còn nằm trong luồng tích hợp PMS. Kết quả AI được trả về bằng RabbitMQ result event. Không chạy RabbitMQ riêng cho luồng tích hợp PMS, nếu không consumer sẽ nghe nhầm broker và job AI sẽ không được xử lý.
 
 Local host mode, khi PMS gateway đang chạy ở `http://localhost:5194` và RabbitMQ publish port `5672`:
 
 ```bash
 cd /home/minhchau/Documents/Vision-Based-Fault-Detection
-CALLBACK_BASE_URL=http://localhost:5194 \
 RABBITMQ_HOST=localhost \
 RABBITMQ_PORT=5672 \
 ALLOW_PRIVATE_IPS=true \
@@ -159,8 +162,13 @@ docker compose up -d --build
 `.env` của AI chứa các cấu hình tích hợp:
 
 - `RABBITMQ_HOST=uav-rabbitmq`
-- `CALLBACK_BASE_URL=http://uav-gateway:8080`
 - `AI_SERVICE_KEY` lấy cùng giá trị với `AIService_ServiceKey` bên PMS
+- `RESULT_EXCHANGE=identity-exchange`
+- `RESULT_ROUTING_KEY=identity.event.aianalysisresultevent`
+- `RESULT_QUEUE_NAME=ai.analysis.result`
+- `RESULT_RETRY_QUEUE_NAME=ai.analysis.result.retry`
+- `RESULT_DEAD_LETTER_QUEUE=ai.analysis.result.dead-letter`
+- `MESSAGE_RETRY_LIMIT=3`
 - `PMS_DOCKER_NETWORK` mặc định là `uavpms_org_default`; đổi biến này nếu PMS compose tạo network tên khác
 - `ROBOFLOW_API_URL` không cần khai báo vì Compose cố định vào `http://roboflow-inference:9001`
 
@@ -175,6 +183,9 @@ RabbitMQ binding kỳ vọng:
 
 ```text
 identity-exchange -> ai.analysis.server.requested -> identity.event.aianalysisrequestedevent.server
+identity-exchange -> ai.analysis.result -> identity.event.aianalysisresultevent
+ai.analysis.result.retry --TTL--> identity-exchange(identity.event.aianalysisresultevent)
+ai.analysis.result.dead-letter <- DLX khi result payload invalid hoặc xử lý vượt retry limit
 ```
 
 ## Kiểm thử (Testing)

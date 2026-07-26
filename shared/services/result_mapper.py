@@ -40,6 +40,8 @@ def map_success_result(
     processing_time_ms: int,
     device_profile: str = "",
     asset_id: Optional[str] = None,
+    mission_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
     image_url: Optional[str] = None,
     tower_id: Optional[str] = None,
     gps: Optional[dict] = None,
@@ -79,6 +81,9 @@ def map_success_result(
     return AnalysisResult(
         request_id=request_id,
         media_id=media_id,
+        mission_id=mission_id,
+        asset_id=asset_id,
+        correlation_id=correlation_id,
         status=AnalysisStatus.COMPLETED,
         model_name=model_name,
         model_version=model_version,
@@ -104,6 +109,9 @@ def map_failure_result(
     media_id: Optional[str],
     error_code: str,
     error_message: str,
+    mission_id: Optional[str] = None,
+    asset_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
 ) -> AnalysisResult:
     """Map an inference failure to an AnalysisResult callback payload.
 
@@ -119,6 +127,9 @@ def map_failure_result(
     return AnalysisResult(
         request_id=request_id,
         media_id=media_id,
+        mission_id=mission_id,
+        asset_id=asset_id,
+        correlation_id=correlation_id,
         status=AnalysisStatus.FAILED,
         error_code=error_code,
         error_message=error_message,

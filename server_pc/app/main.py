@@ -121,7 +121,6 @@ class AnalyzePayload(BaseModel):
     mediaType: str = "Image"
     analysisType: str = "General"
     preferredModel: Optional[str] = None
-    callbackUrl: Optional[str] = None
     correlationId: Optional[str] = None
 
 
@@ -134,9 +133,11 @@ def analyze(payload: AnalyzePayload, background_tasks: BackgroundTasks):
 
 
 def _run_analysis(payload: AnalyzePayload):
-    from shared.services.callback_service import send_callback, CallbackError
     from shared.services.media_downloader import download_media, resolve_media_url
     from shared.services.result_mapper import map_success_result, map_failure_result
+    from shared.services.result_event_mapper import map_result_to_event
+    from shared.messaging.rabbitmq_client import RabbitMQClient
+    from shared.messaging.result_publisher import publish_analysis_result
 
     set_correlation_context(
         correlation_id=payload.correlationId,
@@ -188,6 +189,8 @@ def _run_analysis(payload: AnalyzePayload):
             ms,
             "server",
             asset_id=payload.assetId,
+            mission_id=None,
+            correlation_id=payload.correlationId,
             image_url=payload.fileUrl,
         )
         if output.harness_run_id:
@@ -201,25 +204,28 @@ def _run_analysis(payload: AnalyzePayload):
             payload.mediaId,
             "MODEL_INFERENCE_FAILED",
             str(e),
+            correlation_id=payload.correlationId,
         )
 
     try:
-        send_callback(
-            result=result,
-            callback_url=payload.callbackUrl or settings.callback_url,
-            service_key=settings.ai_service_key,
-            max_retries=settings.callback_max_retries,
-            base_delay=settings.callback_retry_base_delay,
-            max_delay=settings.callback_retry_max_delay,
-            timeout=settings.callback_timeout,
-            restrict_to_base_url=(
-                settings.callback_base_url
-                if settings.restrict_callback_to_base_url else None
-            ),
-            allow_private_ips=settings.allow_private_ips,
+        client = RabbitMQClient(
+            host=settings.rabbitmq_host,
+            port=settings.rabbitmq_port,
+            user=settings.rabbitmq_user,
+            password=settings.rabbitmq_pass,
+            heartbeat=settings.rabbitmq_heartbeat,
+            prefetch_count=settings.rabbitmq_prefetch_count,
         )
-    except CallbackError:
-        logger.error(f"Callback failed for {payload.requestId}")
+        channel = client.connect()
+        publish_analysis_result(
+            channel,
+            map_result_to_event(result),
+            routing_key=settings.result_routing_key,
+            exchange=settings.result_exchange,
+        )
+        client.close()
+    except Exception:
+        logger.error(f"Result publish failed for {payload.requestId}", exc_info=True)
     finally:
         clear_correlation_context()
 
