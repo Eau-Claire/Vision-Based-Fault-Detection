@@ -8,7 +8,7 @@ analysis runner, and publishes result events back to RabbitMQ.
 import json
 import time
 import threading
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from json import JSONDecodeError
 
 import pika
@@ -257,7 +257,7 @@ def _retry_or_dead_letter(ch, delivery_tag, body, properties, settings, retry_co
                 headers=headers,
                 correlation_id=getattr(properties, "correlation_id", None),
                 message_id=getattr(properties, "message_id", None),
-                timestamp=int(datetime.now(UTC).timestamp()),
+                timestamp=int(datetime.now(timezone.utc).timestamp()),
             ),
         )
         ch.basic_ack(delivery_tag=delivery_tag)
